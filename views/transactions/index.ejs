@@ -1,0 +1,501 @@
+<%- include('../partials/head') %>
+<div class="app-shell">
+  <%- include('../partials/sidebar') %>
+
+  <main class="main-content">
+    <div class="topbar">
+      <div>
+        <h2 class="display mb-0">Movimentações</h2>
+        <p style="color:var(--text-muted);margin:0;">Receitas, despesas e transferências.</p>
+      </div>
+      <div class="d-flex gap-2 flex-wrap">
+        <a href="/api/users/me/export/csv" class="btn-fp btn-ghost-fp"><i class="fa-solid fa-file-csv"></i> CSV</a>
+        <a href="/api/users/me/export/pdf" class="btn-fp btn-ghost-fp"><i class="fa-solid fa-file-pdf"></i> PDF</a>
+        <button class="btn-fp btn-ghost-fp" onclick="openReceiptModal()"><i class="fa-solid fa-camera"></i> Comprovante</button>
+        <button class="btn-fp btn-primary-fp" onclick="openTxModal()"><i class="fa-solid fa-plus"></i> Nova</button>
+      </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-3 form-fp">
+      <div class="row g-2 align-items-end">
+        <div class="col-6 col-md-2">
+          <label>Tipo</label>
+          <select class="form-control" id="filterType">
+            <option value="">Todos</option>
+            <option value="receita">Receita</option>
+            <option value="despesa">Despesa</option>
+            <option value="transferencia">Transferência</option>
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <label>Banco</label>
+          <select class="form-control" id="filterBank">
+            <option value="">Todos</option>
+            <% banks.forEach(b => { %><option value="<%= b._id %>"><%= b.name %></option><% }) %>
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <label>Categoria</label>
+          <select class="form-control" id="filterCategory">
+            <option value="">Todas</option>
+            <% categories.forEach(c => { %><option value="<%= c._id %>"><%= c.name %></option><% }) %>
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <label>Método</label>
+          <select class="form-control" id="filterMethod">
+            <option value="">Todos</option>
+            <option value="PIX">PIX</option>
+            <option value="Cartão">Cartão</option>
+            <option value="Boleto">Boleto</option>
+            <option value="TED">TED</option>
+            <option value="DOC">DOC</option>
+            <option value="Dinheiro">Dinheiro</option>
+            <option value="Transferência">Transferência</option>
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <label>Status</label>
+          <select class="form-control" id="filterStatus">
+            <option value="">Todos</option>
+            <option value="pago">Pago</option>
+            <option value="pendente">Pendente</option>
+            <option value="agendado">Agendado</option>
+          </select>
+        </div>
+        <div class="col-6 col-md-3">
+          <label>Buscar</label>
+          <input type="text" class="form-control" id="filterSearch" placeholder="Descrição, nota...">
+        </div>
+        <div class="col-6 col-md-2">
+          <button class="btn-fp btn-primary-fp w-100" onclick="loadTransactions(1)"><i class="fa-solid fa-filter"></i> Filtrar</button>
+        </div>
+      </div>
+      <div class="mt-2">
+        <button class="btn-fp btn-ghost-fp" style="font-size:0.8rem;" onclick="quickFilterBoletosPendentes()">
+          <i class="fa-solid fa-file-invoice-dollar"></i> Ver boletos pendentes
+        </button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div id="txList"></div>
+      <div class="empty-state d-none" id="txEmpty">
+        <i class="fa-solid fa-receipt"></i>
+        <p>Nenhuma movimentação encontrada.</p>
+      </div>
+      <div class="d-flex justify-content-between align-items-center mt-3" id="txPagination"></div>
+    </div>
+  </main>
+</div>
+
+<%- include('../partials/footer') %>
+
+<!-- Modal Transação -->
+<div class="modal fade" id="txModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:20px;border:none;">
+      <div class="modal-body p-4">
+        <h5 class="display mb-3">Nova Movimentação</h5>
+        <form id="txForm" class="form-fp">
+          <div class="row g-3">
+            <div class="col-12">
+              <label>Tipo</label>
+              <select class="form-control" name="type" id="txType" required>
+                <option value="despesa">Despesa</option>
+                <option value="receita">Receita</option>
+                <option value="transferencia">Transferência</option>
+              </select>
+            </div>
+            <div class="col-12">
+              <label>Descrição</label>
+              <input type="text" class="form-control" name="description" id="txDescriptionField" required placeholder="Ex: Supermercado, Salário...">
+              <div id="categorySuggestion" class="d-none" style="font-size:0.75rem;color:var(--blue);margin-top:0.3rem;cursor:pointer;"></div>
+            </div>
+            <div class="col-6">
+              <label>Valor (R$)</label>
+              <input type="number" step="0.01" min="0.01" class="form-control" name="amount" required>
+            </div>
+            <div class="col-6">
+              <label>Data</label>
+              <input type="date" class="form-control" name="date" required>
+            </div>
+            <div class="col-6">
+              <label>Banco de Origem</label>
+              <select class="form-control" name="bank" required>
+                <% banks.forEach(b => { %><option value="<%= b._id %>"><%= b.name %></option><% }) %>
+              </select>
+            </div>
+            <div class="col-6 d-none" id="destBankWrap">
+              <label>Banco de Destino</label>
+              <select class="form-control" name="destinationBank">
+                <% banks.forEach(b => { %><option value="<%= b._id %>"><%= b.name %></option><% }) %>
+              </select>
+            </div>
+            <div class="col-6" id="categoryWrap">
+              <label>Categoria</label>
+              <select class="form-control" name="category">
+                <option value="">Sem categoria</option>
+                <% categories.forEach(c => { %><option value="<%= c._id %>" data-type="<%= c.type %>"><%= c.name %></option><% }) %>
+              </select>
+            </div>
+            <div class="col-6">
+              <label>Método</label>
+              <select class="form-control" name="method">
+                <option value="PIX">PIX</option>
+                <option value="Cartão">Cartão</option>
+                <option value="Boleto">Boleto</option>
+                <option value="TED">TED</option>
+                <option value="DOC">DOC</option>
+                <option value="Dinheiro">Dinheiro</option>
+                <option value="Transferência">Transferência</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label>Status</label>
+              <select class="form-control" name="status">
+                <option value="pago">Pago</option>
+                <option value="pendente">Pendente</option>
+                <option value="agendado">Agendado</option>
+              </select>
+            </div>
+            <div class="col-6 d-none" id="dueDateWrap">
+              <label>Vencimento</label>
+              <input type="date" class="form-control" name="dueDate">
+            </div>
+            <div class="col-6 d-flex align-items-center gap-2 pt-4">
+              <input type="checkbox" name="isRecurring" id="isRecurring" style="width:18px;height:18px;">
+              <label for="isRecurring" class="mb-0">Recorrente</label>
+            </div>
+          </div>
+          <input type="hidden" name="attachment" id="txAttachment">
+          <div id="txAttachmentPreview" class="mt-2" style="font-size:0.8rem;color:var(--text-muted);"></div>
+          <button type="submit" class="btn-fp btn-primary-fp w-100 py-2 mt-4" id="txSubmitBtn">Salvar Movimentação</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Comprovante -->
+<div class="modal fade" id="receiptModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:20px;border:none;">
+      <div class="modal-body p-4">
+        <h5 class="display mb-2">Adicionar por comprovante ou boleto</h5>
+        <p style="color:var(--text-muted);font-size:0.85rem;">Envie a foto de um comprovante/recibo, OU o PDF de um boleto. A IA lê os dados e pré-preenche a movimentação — você confirma antes de salvar.</p>
+        <input type="file" id="receiptFile" accept=".jpg,.jpeg,.png,.webp,.pdf" class="form-control mb-3">
+        <img id="receiptPreviewImg" class="d-none mb-3" style="max-width:100%;border-radius:12px;">
+        <div id="receiptPreviewPdf" class="d-none mb-3" style="padding:1rem;border:1px dashed var(--border);border-radius:12px;text-align:center;color:var(--text-muted);">
+          <i class="fa-solid fa-file-pdf" style="font-size:1.6rem;color:var(--danger);"></i>
+          <div style="font-size:0.85rem;margin-top:0.4rem;" id="receiptPdfName"></div>
+        </div>
+        <button class="btn-fp btn-primary-fp w-100 py-2" id="receiptScanBtn" onclick="scanReceipt()">
+          <i class="fa-solid fa-wand-magic-sparkles"></i> Analisar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/scripts') %>
+
+<script>
+  const txModal = new bootstrap.Modal(document.getElementById('txModal'));
+  const receiptModal = new bootstrap.Modal(document.getElementById('receiptModal'));
+  let currentPage = 1;
+
+  function openTxModal(prefill) {
+    const form = document.getElementById('txForm');
+    form.reset();
+    document.getElementById('txAttachment').value = '';
+    document.getElementById('txAttachmentPreview').innerHTML = '';
+    form.elements.namedItem('date').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('dueDateWrap').classList.toggle('d-none', form.elements.namedItem('method').value !== 'Boleto');
+
+    if (prefill) {
+      if (prefill.description) form.elements.namedItem('description').value = prefill.description;
+      if (prefill.amount) form.elements.namedItem('amount').value = prefill.amount;
+      if (prefill.date) form.elements.namedItem('date').value = prefill.date;
+      if (prefill.dueDate) form.elements.namedItem('dueDate').value = prefill.dueDate;
+      if (prefill.type) form.elements.namedItem('type').value = prefill.type;
+      if (prefill.method) form.elements.namedItem('method').value = prefill.method;
+      if (prefill.status) form.elements.namedItem('status').value = prefill.status;
+      if (prefill.category) form.elements.namedItem('category').value = prefill.category;
+      if (prefill.attachment) {
+        document.getElementById('txAttachment').value = prefill.attachment;
+        document.getElementById('txAttachmentPreview').innerHTML =
+          '<i class="fa-solid fa-paperclip"></i> Comprovante anexado' +
+          (prefill.confidence ? ` · confiança da leitura: ${fpEscapeHtml(prefill.confidence)}` : '');
+      }
+      document.getElementById('destBankWrap').classList.toggle('d-none', form.elements.namedItem('type').value !== 'transferencia');
+      document.getElementById('categoryWrap').classList.toggle('d-none', form.elements.namedItem('type').value === 'transferencia');
+      document.getElementById('dueDateWrap').classList.toggle('d-none', form.elements.namedItem('method').value !== 'Boleto');
+    }
+
+    txModal.show();
+  }
+  if (new URLSearchParams(location.search).get('new') === '1') openTxModal();
+
+  document.getElementById('txType').addEventListener('change', (e) => {
+    document.getElementById('destBankWrap').classList.toggle('d-none', e.target.value !== 'transferencia');
+    document.getElementById('categoryWrap').classList.toggle('d-none', e.target.value === 'transferencia');
+  });
+
+  document.querySelector('select[name="method"]').addEventListener('change', (e) => {
+    document.getElementById('dueDateWrap').classList.toggle('d-none', e.target.value !== 'Boleto');
+  });
+
+  // ---------- Sugestão automática de categoria (baseada no histórico) ----------
+  let categorySuggestTimeout = null;
+  document.getElementById('txDescriptionField').addEventListener('input', (e) => {
+    clearTimeout(categorySuggestTimeout);
+    const suggestionBox = document.getElementById('categorySuggestion');
+    suggestionBox.classList.add('d-none');
+    const value = e.target.value;
+    if (value.trim().length < 3) return;
+
+    categorySuggestTimeout = setTimeout(async () => {
+      try {
+        const form = document.getElementById('txForm');
+        const type = form.elements.namedItem('type').value;
+        const data = await fpFetch(`/api/transactions/suggest-category?description=${encodeURIComponent(value)}&type=${type}`);
+        if (!data.category) return;
+
+        const catSelect = form.elements.namedItem('category');
+        const option = catSelect.querySelector(`option[value="${data.category}"]`);
+        if (!option) return;
+
+        suggestionBox.textContent = `Sugestão: ${option.textContent.trim()} (baseado no seu histórico) — clique pra aplicar`;
+        suggestionBox.classList.remove('d-none');
+        suggestionBox.onclick = () => {
+          catSelect.value = data.category;
+          suggestionBox.classList.add('d-none');
+        };
+      } catch {
+        // sugestão é só um extra — falha silenciosa não deve incomodar o usuário
+      }
+    }, 600); // debounce: só busca depois que a pessoa parar de digitar por 600ms
+  });
+
+  // ---------- Comprovante / boleto (leitura por IA) ----------
+  function openReceiptModal() {
+    document.getElementById('receiptFile').value = '';
+    document.getElementById('receiptPreviewImg').classList.add('d-none');
+    document.getElementById('receiptPreviewPdf').classList.add('d-none');
+    receiptModal.show();
+  }
+
+  document.getElementById('receiptFile').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    const img = document.getElementById('receiptPreviewImg');
+    const pdfBox = document.getElementById('receiptPreviewPdf');
+    if (!file) { img.classList.add('d-none'); pdfBox.classList.add('d-none'); return; }
+
+    if (file.type === 'application/pdf') {
+      img.classList.add('d-none');
+      document.getElementById('receiptPdfName').textContent = file.name;
+      pdfBox.classList.remove('d-none');
+    } else {
+      pdfBox.classList.add('d-none');
+      img.src = URL.createObjectURL(file);
+      img.classList.remove('d-none');
+    }
+  });
+
+  async function scanReceipt() {
+    const fileInput = document.getElementById('receiptFile');
+    const file = fileInput.files[0];
+    if (!file) { fpToast('Selecione uma imagem do comprovante.', 'error'); return; }
+
+    const btn = document.getElementById('receiptScanBtn');
+    fpSetLoading(btn, true);
+
+    try {
+      const formData = new FormData();
+      formData.append('receipt', file);
+
+      let res = await fetch('/api/transactions/scan-receipt', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-CSRF-Token': fpCsrfToken() },
+        body: formData
+      });
+
+      if (res.status === 401) {
+        const refresh = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin' });
+        if (refresh.ok) {
+          res = await fetch('/api/transactions/scan-receipt', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'X-CSRF-Token': fpCsrfToken() },
+            body: formData
+          });
+        }
+      }
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || 'Não foi possível analisar o comprovante.');
+
+      receiptModal.hide();
+
+      if (!data.configured) {
+        fpToast(data.message, 'error');
+        openTxModal({ attachment: data.attachment });
+        return;
+      }
+
+      if (data.error) {
+        fpToast(data.message, 'error');
+        openTxModal({ attachment: data.attachment });
+        return;
+      }
+
+      fpToast(data.isBoleto ? 'Boleto lido! Confira os dados antes de salvar.' : 'Comprovante lido! Confira os dados antes de salvar.');
+      openTxModal({ ...data.suggestion, attachment: data.attachment });
+    } catch (err) {
+      fpToast(err.message, 'error');
+    } finally {
+      fpSetLoading(btn, false);
+    }
+  }
+
+  document.getElementById('txForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('txSubmitBtn');
+    const formData = new FormData(e.target);
+    const payload = Object.fromEntries(formData);
+    payload.isRecurring = formData.get('isRecurring') === 'on';
+
+    fpSetLoading(btn, true);
+    try {
+      const data = await fpFetch('/api/transactions', { method: 'POST', body: payload });
+      fpToast('Movimentação registrada com sucesso!');
+      if (data.anomaly && data.anomaly.isAnomaly) {
+        setTimeout(() => fpToast('⚠️ ' + data.anomaly.message, 'error'), 400);
+      }
+      txModal.hide();
+      loadTransactions(1);
+    } catch (err) {
+      fpToast(err.message, 'error');
+    } finally {
+      fpSetLoading(btn, false);
+    }
+  });
+
+  function txIconColor(t) {
+    if (t.type === 'transferencia') return { icon: 'fa-right-left', color: '#2563EB' };
+    if (t.category) return { icon: t.category.icon.replace('fa-solid ', ''), color: t.category.color };
+    return { icon: 'fa-circle', color: '#94A3B8' };
+  }
+
+  async function loadTransactions(page = 1) {
+    currentPage = page;
+    const params = new URLSearchParams({
+      page, limit: 15,
+      type: document.getElementById('filterType').value,
+      bank: document.getElementById('filterBank').value,
+      category: document.getElementById('filterCategory').value,
+      method: document.getElementById('filterMethod').value,
+      status: document.getElementById('filterStatus').value,
+      search: document.getElementById('filterSearch').value
+    });
+
+    try {
+      const data = await fpFetch('/api/transactions?' + params.toString());
+      const list = document.getElementById('txList');
+      const empty = document.getElementById('txEmpty');
+
+      if (data.transactions.length === 0) {
+        list.innerHTML = '';
+        empty.classList.remove('d-none');
+      } else {
+        empty.classList.add('d-none');
+        list.innerHTML = data.transactions.map(t => {
+          const meta = txIconColor(t);
+          const sign = t.type === 'despesa' ? '-' : (t.type === 'receita' ? '+' : '');
+          const color = t.type === 'despesa' ? 'var(--danger)' : (t.type === 'receita' ? 'var(--green)' : 'var(--blue)');
+          const safeIcon = fpEscapeHtml(meta.icon);
+          const safeColor = fpEscapeHtml(meta.color);
+
+          const isOverdue = t.status === 'pendente' && t.dueDate && new Date(t.dueDate) < new Date();
+          let statusBadge = '';
+          if (isOverdue) {
+            statusBadge = '<span style="font-size:0.68rem;font-weight:700;color:var(--danger);background:var(--danger)1a;padding:0.1rem 0.5rem;border-radius:6px;">VENCIDO</span>';
+          } else if (t.status === 'pendente') {
+            statusBadge = '<span style="font-size:0.68rem;font-weight:700;color:#B45309;background:#B450091a;padding:0.1rem 0.5rem;border-radius:6px;">PENDENTE</span>';
+          } else if (t.status === 'agendado') {
+            statusBadge = '<span style="font-size:0.68rem;font-weight:700;color:var(--blue);background:var(--blue)1a;padding:0.1rem 0.5rem;border-radius:6px;">AGENDADO</span>';
+          }
+
+          const dueInfo = t.dueDate ? ` · Vence ${fpFormatDate(t.dueDate)}` : '';
+          const attachmentBtn = t.attachment
+            ? `<a href="${fpEscapeHtml(t.attachment)}" target="_blank" class="btn-fp btn-ghost-fp" style="padding:0.3rem 0.6rem;" title="Ver comprovante"><i class="fa-solid fa-paperclip"></i></a>`
+            : '';
+          const payBtn = t.status !== 'pago'
+            ? `<button class="btn-fp btn-ghost-fp" style="padding:0.3rem 0.6rem;color:var(--green);" title="Marcar como pago" onclick="markAsPaid('${t._id}')"><i class="fa-solid fa-check"></i></button>`
+            : '';
+
+          return `
+          <div class="d-flex justify-content-between align-items-center py-3" style="border-bottom:1px solid var(--border);">
+            <div class="d-flex align-items-center gap-3" style="min-width:0;">
+              <div style="width:38px;height:38px;border-radius:10px;background:${safeColor}22;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="fa-solid ${safeIcon}" style="color:${safeColor};"></i>
+              </div>
+              <div style="min-width:0;">
+                <div style="font-weight:600;font-size:0.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;">${fpEscapeHtml(t.description)} ${statusBadge}</div>
+                <div style="font-size:0.75rem;color:var(--text-faint);">${fpFormatDate(t.date)} · ${fpEscapeHtml(t.bank ? t.bank.name : '')} · ${fpEscapeHtml(t.method)}${dueInfo}</div>
+              </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <span class="amount" style="font-weight:700;color:${color};">${sign} ${fpFormatCurrency(t.amount)}</span>
+              ${attachmentBtn}
+              ${payBtn}
+              <button class="btn-fp btn-ghost-fp" style="padding:0.3rem 0.6rem;" onclick="deleteTx('${t._id}')"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>`;
+        }).join('');
+      }
+
+      const p = data.pagination;
+      document.getElementById('txPagination').innerHTML = p.pages > 1 ? `
+        <span style="font-size:0.8rem;color:var(--text-muted);">Página ${p.page} de ${p.pages} (${p.total} registros)</span>
+        <div class="d-flex gap-2">
+          <button class="btn-fp btn-ghost-fp" ${p.page <= 1 ? 'disabled' : ''} onclick="loadTransactions(${p.page - 1})">Anterior</button>
+          <button class="btn-fp btn-ghost-fp" ${p.page >= p.pages ? 'disabled' : ''} onclick="loadTransactions(${p.page + 1})">Próxima</button>
+        </div>` : '';
+    } catch (err) {
+      fpToast(err.message, 'error');
+    }
+  }
+
+  function quickFilterBoletosPendentes() {
+    document.getElementById('filterMethod').value = 'Boleto';
+    document.getElementById('filterStatus').value = 'pendente';
+    loadTransactions(1);
+  }
+
+  async function markAsPaid(id) {
+    try {
+      await fpFetch('/api/transactions/' + id, { method: 'PUT', body: { status: 'pago' } });
+      fpToast('Marcado como pago.');
+      loadTransactions(currentPage);
+    } catch (err) {
+      fpToast(err.message, 'error');
+    }
+  }
+
+  async function deleteTx(id) {
+    if (!confirm('Deseja realmente excluir esta movimentação?')) return;
+    try {
+      await fpFetch('/api/transactions/' + id, { method: 'DELETE' });
+      fpToast('Movimentação excluída.');
+      loadTransactions(currentPage);
+    } catch (err) {
+      fpToast(err.message, 'error');
+    }
+  }
+
+  loadTransactions(1);
+</script>

@@ -1,0 +1,195 @@
+<%- include('../partials/head') %>
+<div class="auth-shell">
+  <div class="card auth-card" data-aos="fade-up">
+    <div class="text-center mb-4">
+      <img src="/img/logo.svg" width="52" height="52" alt="FinPilot AI" />
+      <h3 class="display mt-3 mb-1">Bem-vindo de volta</h3>
+      <p style="color: var(--text-muted); font-size: 0.9rem">
+        Entre na sua conta FinPilot AI
+      </p>
+    </div>
+
+    <form id="loginForm" class="form-fp">
+      <div class="mb-3">
+        <label>E-mail</label>
+        <input
+          type="email"
+          class="form-control"
+          name="email"
+          required
+          placeholder="voce@email.com"
+        />
+      </div>
+      <div class="mb-3">
+        <label>Senha</label>
+        <input
+          type="password"
+          class="form-control"
+          name="password"
+          required
+          placeholder="••••••••"
+        />
+      </div>
+      <button
+        type="submit"
+        class="btn-fp btn-primary-fp w-100 py-2 mt-2"
+        id="loginBtn"
+      >
+        Entrar
+      </button>
+    </form>
+
+    <div class="face-divider"><span>ou</span></div>
+
+    <button type="button" class="btn-fp btn-ghost-fp w-100 py-2" id="faceLoginToggle">
+      <i class="fa-solid fa-face-viewfinder"></i> Entrar com reconhecimento facial
+    </button>
+
+    <div id="faceLoginBox" class="face-login-box" style="display:none">
+      <div class="face-scan-wrap" id="faceScanWrap">
+        <video id="faceVideo" autoplay playsinline muted></video>
+        <div class="face-scan-shade"></div>
+        <div class="face-scan-hint">Reconhecimento facial</div>
+        <div class="face-scan-guide"><div class="scan-line"></div></div>
+        <div class="face-scan-corners">
+          <span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span>
+        </div>
+        <div class="face-scan-hold"><div class="fill" id="faceHoldFill"></div></div>
+        <div id="faceStatus" class="face-scan-status"><span class="dot"></span><span id="faceStatusText">Carregando câmera…</span></div>
+      </div>
+      <button type="button" class="btn-fp btn-ghost-fp w-100 py-2 mt-3" id="faceCancelBtn">
+        Cancelar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal 2FA -->
+<div class="modal fade" id="twoFactorModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:20px;border:none;">
+      <div class="modal-body p-4">
+        <h5 class="display mb-2">Verificação em duas etapas</h5>
+        <p style="color:var(--text-muted);font-size:0.85rem;">Abra seu app autenticador (Google Authenticator, Authy) e digite o código de 6 dígitos.</p>
+        <form id="twoFactorForm">
+          <input type="hidden" id="twoFactorPendingToken">
+          <input type="text" class="form-control text-center mb-3" id="twoFactorCode" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="000000" style="font-size:1.6rem;letter-spacing:0.4rem;" required autocomplete="one-time-code">
+          <p style="font-size:0.75rem;color:var(--text-faint);">Sem acesso ao app? Use um dos seus códigos de backup no lugar do código de 6 dígitos.</p>
+          <button type="submit" class="btn-fp btn-primary-fp w-100 py-2" id="twoFactorSubmitBtn">Confirmar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/scripts') %>
+<script src="/vendor/face-api/face-api.min.js"></script>
+<link rel="stylesheet" href="/css/face-scan.css">
+<script src="/js/face-scan.js?v=<%= buildVersion %>"></script>
+
+<style>
+  .face-divider { display:flex; align-items:center; gap:.75rem; margin:1.1rem 0; color: var(--text-faint); font-size:.8rem; }
+  .face-divider::before, .face-divider::after { content:''; flex:1; height:1px; background: var(--border); }
+  .face-login-box { margin-top: 1rem; }
+</style>
+
+<script>
+  document.getElementById("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById("loginBtn");
+    const formData = new FormData(e.target);
+    fpSetLoading(btn, true);
+    try {
+      const data = await fpFetch("/api/auth/login", {
+        method: "POST",
+        body: Object.fromEntries(formData),
+      });
+
+      if (data.requiresTwoFactor) {
+        fpSetLoading(btn, false);
+        openTwoFactorPrompt(data.pendingToken);
+        return;
+      }
+
+      fpToast(data.message);
+      window.location.href = data.redirect || "/dashboard";
+    } catch (err) {
+      fpToast(err.message, "error");
+      fpSetLoading(btn, false);
+    }
+  });
+
+  // ---------- Segundo fator (2FA) ----------
+  const twoFactorModal = new bootstrap.Modal(document.getElementById("twoFactorModal"));
+  function openTwoFactorPrompt(pendingToken) {
+    document.getElementById("twoFactorPendingToken").value = pendingToken;
+    document.getElementById("twoFactorCode").value = "";
+    twoFactorModal.show();
+    setTimeout(() => document.getElementById("twoFactorCode").focus(), 300);
+  }
+
+  document.getElementById("twoFactorForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById("twoFactorSubmitBtn");
+    fpSetLoading(btn, true);
+    try {
+      const data = await fpFetch("/api/auth/2fa/verify", {
+        method: "POST",
+        body: {
+          pendingToken: document.getElementById("twoFactorPendingToken").value,
+          code: document.getElementById("twoFactorCode").value,
+        },
+      });
+      fpToast(data.message);
+      window.location.href = data.redirect || "/dashboard";
+    } catch (err) {
+      fpToast(err.message, "error");
+      fpSetLoading(btn, false);
+    }
+  });
+
+  // ---------- Login facial (automático, sem clique para capturar) ----------
+  const faceToggle = document.getElementById("faceLoginToggle");
+  const faceBox = document.getElementById("faceLoginBox");
+  const faceCancelBtn = document.getElementById("faceCancelBtn");
+
+  let faceScan = null;
+
+  async function startFaceLogin() {
+    faceBox.style.display = "block";
+    faceToggle.style.display = "none";
+
+    faceScan = new FaceScan({
+      wrapEl: document.getElementById("faceScanWrap"),
+      videoEl: document.getElementById("faceVideo"),
+      statusTextEl: document.getElementById("faceStatusText"),
+      holdFillEl: document.getElementById("faceHoldFill"),
+      onCapture: async (descriptor) => {
+        const data = await fpFetch("/api/auth/face-login", {
+          method: "POST",
+          body: { descriptor },
+        });
+        fpToast(data.message);
+        window.location.href = data.redirect || "/dashboard";
+      },
+    });
+
+    try {
+      await faceScan.start();
+    } catch (err) {
+      fpToast("Permita o acesso à câmera para usar o login facial.", "error");
+    }
+  }
+
+  function stopFaceLogin() {
+    if (faceScan) {
+      faceScan.stop();
+      faceScan = null;
+    }
+    faceBox.style.display = "none";
+    faceToggle.style.display = "inline-flex";
+  }
+
+  faceToggle.addEventListener("click", startFaceLogin);
+  faceCancelBtn.addEventListener("click", stopFaceLogin);
+</script>

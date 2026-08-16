@@ -1,0 +1,331 @@
+<%- include('../partials/head') %>
+<div class="app-shell">
+  <%- include('../partials/sidebar') %>
+
+  <main class="main-content">
+    <div class="topbar">
+      <div>
+        <h2 class="display mb-0">Meu Perfil</h2>
+        <p style="color:var(--text-muted);margin:0;">Gerencie seus dados e preferências.</p>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <!-- Dados pessoais -->
+      <div class="col-lg-6">
+        <div class="card">
+          <h5 class="mb-3">Dados Pessoais</h5>
+          <div class="text-center mb-3">
+            <img src="<%= user.avatar %>" id="avatarPreview" style="width:88px;height:88px;border-radius:50%;object-fit:cover;">
+            <div class="mt-2">
+              <label class="btn-fp btn-ghost-fp" style="cursor:pointer;">
+                <i class="fa-solid fa-camera"></i> Alterar foto
+                <input type="file" id="avatarInput" accept="image/*" hidden>
+              </label>
+            </div>
+          </div>
+          <form id="profileForm" class="form-fp">
+            <div class="mb-3">
+              <label>Nome</label>
+              <input type="text" class="form-control" name="name" value="<%= user.name %>" required>
+            </div>
+            <div class="mb-3">
+              <label>E-mail</label>
+              <input type="email" class="form-control" value="<%= user.email %>" disabled>
+            </div>
+            <button type="submit" class="btn-fp btn-primary-fp w-100 py-2">Salvar Alterações</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Tema -->
+      <div class="col-lg-6">
+        <div class="card mb-3">
+          <h5 class="mb-3">Aparência</h5>
+          <div class="d-flex gap-2">
+            <button class="btn-fp btn-ghost-fp flex-fill" data-theme-set="light"><i class="fa-solid fa-sun"></i> Claro</button>
+            <button class="btn-fp btn-ghost-fp flex-fill" data-theme-set="dark"><i class="fa-solid fa-moon"></i> Escuro</button>
+            <button class="btn-fp btn-ghost-fp flex-fill" data-theme-set="auto"><i class="fa-solid fa-circle-half-stroke"></i> Automático</button>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <h5 class="mb-3">Segurança</h5>
+          <form id="passwordForm" class="form-fp">
+            <div class="mb-2">
+              <label>Senha atual</label>
+              <input type="password" class="form-control" name="currentPassword" required>
+            </div>
+            <div class="mb-2">
+              <label>Nova senha</label>
+              <input type="password" class="form-control" name="newPassword" minlength="8" required>
+            </div>
+            <div class="mb-3">
+              <label>Confirmar nova senha</label>
+              <input type="password" class="form-control" name="confirmNewPassword" minlength="8" required>
+            </div>
+            <button type="submit" class="btn-fp btn-ghost-fp w-100 py-2">Alterar Senha</button>
+          </form>
+        </div>
+
+        <div class="card mb-3">
+          <h5 class="mb-3">Notificações</h5>
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div>
+              <strong style="font-size:0.9rem;">Alertas de boletos por e-mail</strong>
+              <p style="font-size:0.78rem;color:var(--text-muted);margin:0;">Avisa quando um boleto está vencido ou vence nos próximos 3 dias.</p>
+            </div>
+            <input type="checkbox" id="emailAlertsToggle" <%= user.emailAlertsEnabled ? 'checked' : '' %> style="width:20px;height:20px;flex-shrink:0;">
+          </div>
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div>
+              <strong style="font-size:0.9rem;">Notificar cada movimentação</strong>
+              <p style="font-size:0.78rem;color:var(--text-muted);margin:0;">Manda um e-mail toda vez que uma movimentação é criada ou paga.</p>
+            </div>
+            <input type="checkbox" id="emailEveryTxToggle" <%= user.emailOnEveryTransaction ? 'checked' : '' %> style="width:20px;height:20px;flex-shrink:0;">
+          </div>
+          <button class="btn-fp btn-ghost-fp w-100" id="testEmailBtn"><i class="fa-solid fa-paper-plane"></i> Enviar e-mail de teste agora</button>
+        </div>
+
+        <div class="card mb-3">
+          <h5 class="mb-3">Autenticação em dois fatores (2FA)</h5>
+          <div id="twoFactorOff" class="<%= user.twoFactorEnabled ? 'd-none' : '' %>">
+            <p style="font-size:0.85rem;color:var(--text-muted);">Adiciona uma segunda camada de segurança: além da senha, é preciso um código de 6 dígitos gerado por um app autenticador (Google Authenticator, Authy).</p>
+            <button class="btn-fp btn-primary-fp" id="start2faBtn"><i class="fa-solid fa-shield-halved"></i> Ativar 2FA</button>
+          </div>
+          <div id="twoFactorOn" class="<%= user.twoFactorEnabled ? '' : 'd-none' %>">
+            <p style="font-size:0.85rem;color:var(--green);"><i class="fa-solid fa-circle-check"></i> 2FA está ativado na sua conta.</p>
+            <div class="d-flex gap-2 align-items-center">
+              <input type="password" class="form-control" id="disable2faPassword" placeholder="Confirme sua senha">
+              <button class="btn-fp btn-danger-fp" id="disable2faBtn" style="white-space:nowrap;">Desativar</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <h5 class="mb-3">Histórico de login</h5>
+          <div id="loginHistoryList" style="font-size:0.85rem;color:var(--text-muted);">Carregando...</div>
+        </div>
+
+        <div class="card mb-3">
+          <h5 class="mb-3">Exportar Dados</h5>
+          <div class="d-flex gap-2 flex-wrap">
+            <a href="/api/users/me/export/csv" class="btn-fp btn-ghost-fp"><i class="fa-solid fa-file-csv"></i> CSV</a>
+            <a href="/api/users/me/export/pdf" class="btn-fp btn-ghost-fp"><i class="fa-solid fa-file-pdf"></i> PDF</a>
+            <a href="/api/users/me/backup" class="btn-fp btn-ghost-fp"><i class="fa-solid fa-database"></i> Backup JSON</a>
+          </div>
+        </div>
+
+        <div class="card" style="border-color:rgba(239,68,68,0.3);">
+          <h5 class="mb-2" style="color:var(--danger);">Zona de Perigo</h5>
+          <p style="font-size:0.85rem;color:var(--text-muted);">Esta ação é irreversível. Todos os seus dados serão excluídos permanentemente.</p>
+          <button class="btn-fp btn-danger-fp" id="deleteAccountBtn">Excluir minha conta</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<%- include('../partials/footer') %>
+
+<!-- Modal Setup 2FA -->
+<div class="modal fade" id="twoFactorSetupModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:20px;border:none;">
+      <div class="modal-body p-4">
+        <div id="twoFactorStep1">
+          <h5 class="display mb-2">Ativar autenticação em duas etapas</h5>
+          <p style="color:var(--text-muted);font-size:0.85rem;">Escaneie o QR Code abaixo com o Google Authenticator, Authy ou outro app autenticador.</p>
+          <div class="text-center mb-3">
+            <img id="twoFactorQrImg" src="" alt="QR Code 2FA" style="max-width:220px;border-radius:12px;">
+          </div>
+          <p style="font-size:0.75rem;color:var(--text-faint);">Não consegue escanear? Digite manualmente: <code id="twoFactorManualSecret" style="word-break:break-all;"></code></p>
+          <label class="mt-2">Digite o código de 6 dígitos gerado pelo app pra confirmar</label>
+          <input type="text" class="form-control text-center mb-3" id="twoFactorEnableCode" inputmode="numeric" maxlength="6" placeholder="000000" style="font-size:1.4rem;letter-spacing:0.3rem;">
+          <button class="btn-fp btn-primary-fp w-100 py-2" id="confirmEnable2faBtn">Confirmar e ativar</button>
+        </div>
+
+        <div id="twoFactorStep2" class="d-none">
+          <h5 class="display mb-2"><i class="fa-solid fa-circle-check" style="color:var(--green);"></i> 2FA ativado!</h5>
+          <p style="color:var(--text-muted);font-size:0.85rem;">Guarde esses códigos de backup em lugar seguro — cada um funciona <strong>uma única vez</strong> e serve pra entrar caso você perca acesso ao app autenticador. Eles não aparecem de novo depois que você fechar esta tela.</p>
+          <div id="backupCodesList" style="background:var(--bg-soft, rgba(0,0,0,0.03));border-radius:12px;padding:1rem;font-family:monospace;font-size:0.9rem;line-height:1.8;"></div>
+          <button class="btn-fp btn-primary-fp w-100 py-2 mt-3" data-bs-dismiss="modal" onclick="window.location.reload()">Entendi, já guardei</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/scripts') %>
+
+<script>
+  document.getElementById('profileForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    try {
+      await fpFetch('/api/users/me', { method: 'PUT', body: Object.fromEntries(formData) });
+      fpToast('Perfil atualizado com sucesso!');
+    } catch (err) {
+      fpToast(err.message, 'error');
+    }
+  });
+
+  document.getElementById('avatarInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('avatar', file);
+    try {
+      const res = await fetch('/api/users/me/avatar', {
+        method: 'POST', body: formData, credentials: 'same-origin',
+        headers: { 'X-CSRF-Token': fpCsrfToken() }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      document.getElementById('avatarPreview').src = data.avatar;
+      fpToast('Foto atualizada!');
+    } catch (err) {
+      fpToast(err.message, 'error');
+    }
+  });
+
+  document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    try {
+      const data = await fpFetch('/api/users/me/password', { method: 'PUT', body: Object.fromEntries(formData) });
+      fpToast(data.message);
+      e.target.reset();
+    } catch (err) {
+      fpToast(err.message, 'error');
+    }
+  });
+
+  document.getElementById('deleteAccountBtn').addEventListener('click', async () => {
+    if (!confirm('Tem certeza? Esta ação não pode ser desfeita.')) return;
+    if (!confirm('Confirmar exclusão definitiva da conta e de todos os dados?')) return;
+    try {
+      const data = await fpFetch('/api/users/me', { method: 'DELETE' });
+      fpToast(data.message);
+      setTimeout(() => window.location.href = data.redirect || '/login', 1200);
+    } catch (err) {
+      fpToast(err.message, 'error');
+    }
+  });
+
+  document.getElementById('emailAlertsToggle').addEventListener('change', async (e) => {
+    try {
+      await fpFetch('/api/users/me', { method: 'PUT', body: { emailAlertsEnabled: e.target.checked } });
+      fpToast(e.target.checked ? 'Alertas por e-mail ativados.' : 'Alertas por e-mail desativados.');
+    } catch (err) {
+      fpToast(err.message, 'error');
+      e.target.checked = !e.target.checked;
+    }
+  });
+
+  document.getElementById('emailEveryTxToggle').addEventListener('change', async (e) => {
+    try {
+      await fpFetch('/api/users/me', { method: 'PUT', body: { emailOnEveryTransaction: e.target.checked } });
+      fpToast(e.target.checked ? 'Você vai receber um e-mail por movimentação.' : 'Notificação por movimentação desativada.');
+    } catch (err) {
+      fpToast(err.message, 'error');
+      e.target.checked = !e.target.checked;
+    }
+  });
+
+  document.getElementById('testEmailBtn').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    fpSetLoading(btn, true);
+    try {
+      const data = await fpFetch('/api/users/me/notifications/test-bills', { method: 'POST' });
+      fpToast(data.message);
+    } catch (err) {
+      fpToast(err.message, 'error');
+    } finally {
+      fpSetLoading(btn, false);
+    }
+  });
+
+  // ---------- Histórico de login ----------
+  async function loadLoginHistory() {
+    const list = document.getElementById('loginHistoryList');
+    try {
+      const data = await fpFetch('/api/users/me/login-history');
+      if (data.history.length === 0) {
+        list.textContent = 'Nenhum registro ainda.';
+        return;
+      }
+      list.innerHTML = data.history.map((h) => {
+        const date = new Date(h.createdAt).toLocaleString('pt-BR');
+        const icon = h.method === 'facial' ? 'fa-face-smile' : 'fa-key';
+        return `
+          <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid var(--border);">
+            <div class="d-flex align-items-center gap-2">
+              <i class="fa-solid ${icon}" style="color:var(--blue);width:16px;"></i>
+              <div>
+                <div style="font-weight:600;">${fpEscapeHtml(h.device || 'Dispositivo desconhecido')}</div>
+                <div style="font-size:0.75rem;color:var(--text-faint);">${fpEscapeHtml(h.ip || '')} · login por ${h.method === 'facial' ? 'reconhecimento facial' : 'senha'}</div>
+              </div>
+            </div>
+            <span style="font-size:0.75rem;color:var(--text-faint);white-space:nowrap;">${date}</span>
+          </div>`;
+      }).join('');
+    } catch (err) {
+      list.textContent = 'Não foi possível carregar o histórico.';
+    }
+  }
+  loadLoginHistory();
+
+  // ---------- 2FA ----------
+  const twoFactorSetupModal = new bootstrap.Modal(document.getElementById('twoFactorSetupModal'));
+
+  document.getElementById('start2faBtn')?.addEventListener('click', async () => {
+    try {
+      const data = await fpFetch('/api/users/me/2fa/setup', { method: 'POST' });
+      document.getElementById('twoFactorQrImg').src = data.qrCode;
+      document.getElementById('twoFactorManualSecret').textContent = data.secret;
+      document.getElementById('twoFactorEnableCode').value = '';
+      document.getElementById('twoFactorStep1').classList.remove('d-none');
+      document.getElementById('twoFactorStep2').classList.add('d-none');
+      twoFactorSetupModal.show();
+    } catch (err) {
+      fpToast(err.message, 'error');
+    }
+  });
+
+  document.getElementById('confirmEnable2faBtn')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const code = document.getElementById('twoFactorEnableCode').value;
+    if (!code || code.length !== 6) return fpToast('Digite o código de 6 dígitos.', 'error');
+
+    fpSetLoading(btn, true);
+    try {
+      const data = await fpFetch('/api/users/me/2fa/enable', { method: 'POST', body: { token: code } });
+      fpToast(data.message);
+      document.getElementById('backupCodesList').innerHTML = data.backupCodes.map((c) => `<div>${fpEscapeHtml(c)}</div>`).join('');
+      document.getElementById('twoFactorStep1').classList.add('d-none');
+      document.getElementById('twoFactorStep2').classList.remove('d-none');
+    } catch (err) {
+      fpToast(err.message, 'error');
+    } finally {
+      fpSetLoading(btn, false);
+    }
+  });
+
+  document.getElementById('disable2faBtn')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const password = document.getElementById('disable2faPassword').value;
+    if (!password) return fpToast('Confirme sua senha pra desativar.', 'error');
+    if (!confirm('Tem certeza? Isso reduz a segurança da sua conta.')) return;
+
+    fpSetLoading(btn, true);
+    try {
+      const data = await fpFetch('/api/users/me/2fa/disable', { method: 'POST', body: { password } });
+      fpToast(data.message);
+      setTimeout(() => window.location.reload(), 800);
+    } catch (err) {
+      fpToast(err.message, 'error');
+      fpSetLoading(btn, false);
+    }
+  });
+</script>

@@ -1,0 +1,201 @@
+<%- include('../partials/head') %>
+<div class="app-shell">
+  <%- include('../partials/sidebar') %>
+
+  <main class="main-content">
+    <div class="topbar">
+      <div>
+        <h2 class="display mb-0">Categorias</h2>
+        <p style="color:var(--text-muted);margin:0;">Organize suas movimentações — crie subcategorias pra detalhar ainda mais (ex: Alimentação → Mercado, Restaurante).</p>
+      </div>
+      <button class="btn-fp btn-primary-fp" onclick="openCategoryModal()"><i class="fa-solid fa-plus"></i> Nova Categoria</button>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <div class="card">
+          <h5 class="mb-3" style="color:var(--danger);"><i class="fa-solid fa-arrow-down"></i> Despesas</h5>
+          <div id="despesaList"></div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card">
+          <h5 class="mb-3" style="color:var(--green);"><i class="fa-solid fa-arrow-up"></i> Receitas</h5>
+          <div id="receitaList"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<%- include('../partials/footer') %>
+
+<!-- Modal Categoria -->
+<div class="modal fade" id="categoryModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:20px;border:none;">
+      <div class="modal-body p-4">
+        <h5 class="display mb-3" id="categoryModalTitle">Nova Categoria</h5>
+        <form id="categoryForm" class="form-fp">
+          <input type="hidden" name="id">
+          <div class="row g-3">
+            <div class="col-6">
+              <label>Nome</label>
+              <input type="text" class="form-control" name="name" required>
+            </div>
+            <div class="col-6">
+              <label>Tipo</label>
+              <select class="form-control" name="type" id="categoryTypeField">
+                <option value="despesa">Despesa</option>
+                <option value="receita">Receita</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label>Ícone (Font Awesome)</label>
+              <input type="text" class="form-control" name="icon" placeholder="fa-solid fa-tag">
+            </div>
+            <div class="col-6">
+              <label>Cor</label>
+              <input type="color" class="form-control form-control-color w-100" name="color" value="#64748B">
+            </div>
+            <div class="col-12">
+              <label>Categoria pai (opcional — deixe em branco pra ser uma categoria principal)</label>
+              <select class="form-control" name="parent" id="parentField">
+                <option value="">Nenhuma — categoria principal</option>
+              </select>
+              <p style="font-size:0.75rem;color:var(--text-faint);margin-top:0.3rem;">Só categorias principais aparecem aqui — uma subcategoria não pode ter outra subcategoria dentro.</p>
+            </div>
+          </div>
+          <button type="submit" class="btn-fp btn-primary-fp w-100 py-2 mt-4" id="categorySubmitBtn">Salvar Categoria</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/scripts') %>
+
+<script>
+  const categoryModal = new bootstrap.Modal(document.getElementById('categoryModal'));
+  let allCategories = <%- JSON.stringify(categories) %>;
+
+  function openCategoryModal(cat = null) {
+    const form = document.getElementById('categoryForm');
+    form.reset();
+    document.getElementById('categoryModalTitle').textContent = cat ? 'Editar Categoria' : 'Nova Categoria';
+    form.elements.namedItem('id').value = cat ? cat._id : '';
+    if (cat) {
+      form.elements.namedItem('name').value = cat.name;
+      form.elements.namedItem('type').value = cat.type;
+      form.elements.namedItem('icon').value = cat.icon;
+      form.elements.namedItem('color').value = cat.color;
+    }
+    populateParentOptions(cat ? cat.type : 'despesa', cat ? cat.parent : '', cat ? cat._id : null);
+    categoryModal.show();
+  }
+
+  document.getElementById('categoryTypeField').addEventListener('change', (e) => {
+    populateParentOptions(e.target.value, '', null);
+  });
+
+  function populateParentOptions(type, selected, excludeId) {
+    const select = document.getElementById('parentField');
+    const topLevel = allCategories.filter((c) => c.type === type && !c.parent && c._id !== excludeId);
+    select.innerHTML = '<option value="">Nenhuma — categoria principal</option>' +
+      topLevel.map((c) => `<option value="${c._id}" ${selected === c._id ? 'selected' : ''}>${fpEscapeHtml(c.name)}</option>`).join('');
+  }
+
+  document.getElementById('categoryForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('categorySubmitBtn');
+    const formData = new FormData(e.target);
+    const payload = Object.fromEntries(formData);
+    const id = payload.id;
+    delete payload.id;
+    if (!payload.parent) payload.parent = null;
+
+    fpSetLoading(btn, true);
+    try {
+      if (id) {
+        await fpFetch('/api/categories/' + id, { method: 'PUT', body: payload });
+      } else {
+        await fpFetch('/api/categories', { method: 'POST', body: payload });
+      }
+      fpToast('Categoria salva com sucesso!');
+      categoryModal.hide();
+      await loadCategories();
+    } catch (err) {
+      fpToast(err.message, 'error');
+    } finally {
+      fpSetLoading(btn, false);
+    }
+  });
+
+  async function deleteCategory(id) {
+    if (!confirm('Excluir esta categoria? Subcategorias dela ficarão sem categoria principal.')) return;
+    try {
+      await fpFetch('/api/categories/' + id, { method: 'DELETE' });
+      fpToast('Categoria excluída.');
+      await loadCategories();
+    } catch (err) {
+      fpToast(err.message, 'error');
+    }
+  }
+
+  function renderList(type) {
+    const container = document.getElementById(type + 'List');
+    const topLevel = allCategories.filter((c) => c.type === type && !c.parent);
+
+    if (topLevel.length === 0) {
+      container.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Nenhuma categoria ainda.</p>';
+      return;
+    }
+
+    container.innerHTML = topLevel.map((c) => {
+      const children = allCategories.filter((sub) => sub.type === type && sub.parent === c._id);
+      const childrenHtml = children.map((sub) => `
+        <div class="d-flex justify-content-between align-items-center py-2" style="padding-left:2rem;border-bottom:1px solid var(--border);">
+          <div class="d-flex align-items-center gap-2">
+            <i class="fa-solid fa-turn-up fa-rotate-90" style="color:var(--text-faint);font-size:0.75rem;"></i>
+            <i class="fa-solid ${fpEscapeHtml((sub.icon || 'fa-solid fa-tag').replace('fa-solid ', ''))}" style="color:${fpEscapeHtml(sub.color)};"></i>
+            <span style="font-size:0.88rem;">${fpEscapeHtml(sub.name)}</span>
+          </div>
+          <div class="d-flex gap-1">
+            <button class="btn-fp btn-ghost-fp" style="padding:0.25rem 0.5rem;" onclick='openCategoryModal(${JSON.stringify(sub)})'><i class="fa-solid fa-pen" style="font-size:0.75rem;"></i></button>
+            ${!sub.isDefault ? `<button class="btn-fp btn-ghost-fp" style="padding:0.25rem 0.5rem;color:var(--danger);" onclick="deleteCategory('${sub._id}')"><i class="fa-solid fa-trash" style="font-size:0.75rem;"></i></button>` : ''}
+          </div>
+        </div>`).join('');
+
+      return `
+        <div class="mb-1">
+          <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid var(--border);">
+            <div class="d-flex align-items-center gap-2">
+              <div style="width:32px;height:32px;border-radius:8px;background:${fpEscapeHtml(c.color)}22;display:flex;align-items:center;justify-content:center;">
+                <i class="fa-solid ${fpEscapeHtml((c.icon || 'fa-solid fa-tag').replace('fa-solid ', ''))}" style="color:${fpEscapeHtml(c.color)};font-size:0.85rem;"></i>
+              </div>
+              <strong style="font-size:0.9rem;">${fpEscapeHtml(c.name)}</strong>
+            </div>
+            <div class="d-flex gap-1">
+              <button class="btn-fp btn-ghost-fp" style="padding:0.25rem 0.5rem;" onclick='openCategoryModal(${JSON.stringify(c)})'><i class="fa-solid fa-pen" style="font-size:0.75rem;"></i></button>
+              ${!c.isDefault ? `<button class="btn-fp btn-ghost-fp" style="padding:0.25rem 0.5rem;color:var(--danger);" onclick="deleteCategory('${c._id}')"><i class="fa-solid fa-trash" style="font-size:0.75rem;"></i></button>` : ''}
+            </div>
+          </div>
+          ${childrenHtml}
+        </div>`;
+    }).join('');
+  }
+
+  async function loadCategories() {
+    try {
+      const data = await fpFetch('/api/categories');
+      allCategories = data.categories;
+      renderList('despesa');
+      renderList('receita');
+    } catch (err) {
+      fpToast(err.message, 'error');
+    }
+  }
+
+  renderList('despesa');
+  renderList('receita');
+</script>

@@ -1,0 +1,293 @@
+<%- include('../partials/head') %>
+<div class="app-shell">
+  <%- include('../partials/sidebar') %>
+
+  <main class="main-content">
+    <div class="topbar">
+      <div>
+        <h2 class="display mb-0">Olá, <%= user.name.split(' ')[0] %> 👋</h2>
+        <p style="color:var(--text-muted);margin:0;">Aqui está o resumo da sua vida financeira hoje.</p>
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn-fp btn-ghost-fp" data-theme-set="light"><i class="fa-solid fa-sun"></i></button>
+        <button class="btn-fp btn-ghost-fp" data-theme-set="dark"><i class="fa-solid fa-moon"></i></button>
+        <a href="/transactions?new=1" class="btn-fp btn-primary-fp"><i class="fa-solid fa-plus"></i> Nova movimentação</a>
+      </div>
+    </div>
+
+    <!-- Cards de resumo -->
+    <div class="row g-3 mb-3">
+      <div class="col-6 col-lg-3" data-aos="fade-up">
+        <div class="card h-100">
+          <div class="stat-label">Saldo Total</div>
+          <div class="stat-value" style="color:var(--blue);"><%= totalBalance.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}) %></div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3" data-aos="fade-up" data-aos-delay="50">
+        <div class="card h-100">
+          <div class="stat-label">Receitas do mês</div>
+          <div class="stat-value" style="color:var(--green);"><%= monthIncome.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}) %></div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3" data-aos="fade-up" data-aos-delay="100">
+        <div class="card h-100">
+          <div class="stat-label">Despesas do mês</div>
+          <div class="stat-value" style="color:var(--danger);"><%= monthExpense.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}) %></div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3" data-aos="fade-up" data-aos-delay="150">
+        <div class="card h-100">
+          <div class="stat-label">Patrimônio</div>
+          <div class="stat-value"><%= netWorth.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}) %></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <!-- Previsão de saldo -->
+      <div class="col-lg-4" data-aos="fade-up">
+        <div class="card h-100">
+          <div class="stat-label">Previsão de saldo (30 dias)</div>
+          <div class="stat-value" style="color:<%= projectedBalance30d >= 0 ? 'var(--green)' : 'var(--danger)' %>;">
+            <%= projectedBalance30d.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}) %>
+          </div>
+          <p style="font-size:0.75rem;color:var(--text-faint);margin:0;">Considera receitas e despesas pendentes/agendadas até lá.</p>
+        </div>
+      </div>
+
+      <!-- Boletos vencendo -->
+      <div class="col-lg-4" data-aos="fade-up" data-aos-delay="50">
+        <div class="card h-100">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="stat-label mb-0">Boletos vencendo</div>
+            <a href="/transactions" style="font-size:0.78rem;">Ver todos</a>
+          </div>
+          <% if (dueSoonBills.length === 0) { %>
+            <div class="empty-state py-3"><i class="fa-solid fa-file-invoice-dollar"></i><p class="mb-0">Nada vencendo nos próximos 7 dias. 🎉</p></div>
+          <% } else { %>
+            <% dueSoonBills.forEach(t => { %>
+              <% const overdue = new Date(t.dueDate) < new Date(); %>
+              <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid var(--border);">
+                <div>
+                  <div style="font-size:0.85rem;font-weight:600;"><%= t.description %></div>
+                  <div style="font-size:0.72rem;color:<%= overdue ? 'var(--danger)' : 'var(--text-faint)' %>;">
+                    <%= overdue ? 'Venceu em' : 'Vence em' %> <%= new Date(t.dueDate).toLocaleDateString('pt-BR') %>
+                  </div>
+                </div>
+                <span class="pill" style="background:<%= overdue ? 'rgba(220,38,38,0.12)' : 'rgba(37,99,235,0.12)' %>;color:<%= overdue ? 'var(--danger)' : 'var(--blue)' %>;">
+                  <%= t.amount.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}) %>
+                </span>
+              </div>
+            <% }) %>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- Assinaturas detectadas -->
+      <div class="col-lg-4" data-aos="fade-up" data-aos-delay="100">
+        <div class="card h-100">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="stat-label mb-0">Assinaturas detectadas</div>
+            <span style="font-size:0.78rem;color:var(--text-muted);"><%= subscriptionsTotal.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}) %>/mês</span>
+          </div>
+          <% if (subscriptions.length === 0) { %>
+            <div class="empty-state py-3"><i class="fa-solid fa-repeat"></i><p class="mb-0">Nenhum gasto recorrente identificado ainda.</p></div>
+          <% } else { %>
+            <% subscriptions.slice(0, 5).forEach(s => { %>
+              <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid var(--border);">
+                <div>
+                  <div style="font-size:0.85rem;font-weight:600;"><%= s.description %></div>
+                  <div style="font-size:0.72rem;color:var(--text-faint);"><%= s.monthsDetected %> meses seguidos · próx. ~<%= new Date(s.nextExpected).toLocaleDateString('pt-BR') %></div>
+                </div>
+                <span class="amount" style="font-size:0.85rem;font-weight:700;"><%= s.averageAmount.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}) %></span>
+              </div>
+            <% }) %>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <!-- Score financeiro -->
+      <div class="col-lg-4">
+        <div class="card h-100 text-center" data-aos="fade-up">
+          <div class="stat-label mb-2">Score Financeiro</div>
+          <div class="score-ring mx-auto mb-2">
+            <svg width="140" height="140" viewBox="0 0 140 140">
+              <circle cx="70" cy="70" r="60" stroke="var(--border)" stroke-width="12" fill="none"/>
+              <circle cx="70" cy="70" r="60" stroke="<%= scoreInfo.color %>" stroke-width="12" fill="none"
+                stroke-linecap="round"
+                stroke-dasharray="<%= (score/1000)*377 %> 377" />
+            </svg>
+            <div class="score-ring-value">
+              <div style="font-family:var(--font-mono);font-size:1.8rem;font-weight:700;"><%= score %></div>
+              <div style="font-size:0.7rem;color:var(--text-faint);">de 1000</div>
+            </div>
+          </div>
+          <div class="pill" style="background:<%= scoreInfo.color %>22; color:<%= scoreInfo.color %>;"><%= scoreInfo.label %></div>
+        </div>
+      </div>
+
+      <!-- Fluxo de caixa -->
+      <div class="col-lg-8">
+        <div class="card h-100" data-aos="fade-up" data-aos-delay="50">
+          <div class="stat-label mb-2">Fluxo de Caixa (6 meses)</div>
+          <canvas id="flowChart" height="130"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <!-- Categorias -->
+      <div class="col-lg-4">
+        <div class="card h-100" data-aos="fade-up">
+          <div class="stat-label mb-2">Despesas por Categoria (mês)</div>
+          <canvas id="categoryChart" height="220"></canvas>
+        </div>
+      </div>
+
+      <!-- Bancos -->
+      <div class="col-lg-4">
+        <div class="card h-100" data-aos="fade-up" data-aos-delay="50">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="stat-label mb-0">Meus Bancos</div>
+            <a href="/banks" style="font-size:0.78rem;">Ver todos</a>
+          </div>
+          <% if (banks.length === 0) { %>
+            <div class="empty-state py-3"><i class="fa-solid fa-building-columns"></i><p class="mb-0">Nenhum banco cadastrado.</p></div>
+          <% } else { %>
+            <% banks.slice(0,5).forEach(b => { %>
+              <div class="bank-chip">
+                <div class="d-flex align-items-center gap-2">
+                  <span style="width:10px;height:10px;border-radius:50%;background:<%= b.color %>;display:inline-block;"></span>
+                  <strong style="font-size:0.88rem;"><%= b.name %></strong>
+                </div>
+                <span class="amount" style="font-size:0.88rem;"><%= b.currentBalance.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}) %></span>
+              </div>
+            <% }) %>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- Metas -->
+      <div class="col-lg-4">
+        <div class="card h-100" data-aos="fade-up" data-aos-delay="100">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="stat-label mb-0">Metas</div>
+            <a href="/goals" style="font-size:0.78rem;">Ver todas</a>
+          </div>
+          <% if (goals.length === 0) { %>
+            <div class="empty-state py-3"><i class="fa-solid fa-bullseye"></i><p class="mb-0">Nenhuma meta ativa.</p></div>
+          <% } else { %>
+            <% goals.forEach(g => { %>
+              <div class="mb-3">
+                <div class="d-flex justify-content-between" style="font-size:0.85rem;">
+                  <strong><%= g.title %></strong>
+                  <span style="color:var(--text-muted);"><%= Math.min(100, Math.round((g.currentAmount/g.targetAmount)*100)) %>%</span>
+                </div>
+                <div class="progress-fp mt-1">
+                  <div class="progress-fp-bar" style="width:<%= Math.min(100, Math.round((g.currentAmount/g.targetAmount)*100)) %>%;"></div>
+                </div>
+              </div>
+            <% }) %>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <!-- Últimos gastos -->
+      <div class="col-lg-6">
+        <div class="card h-100" data-aos="fade-up">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="stat-label mb-0">Últimas Movimentações</div>
+            <a href="/transactions" style="font-size:0.78rem;">Ver todas</a>
+          </div>
+          <% if (recentTransactions.length === 0) { %>
+            <div class="empty-state py-3"><i class="fa-solid fa-receipt"></i><p class="mb-0">Nenhuma movimentação ainda.</p></div>
+          <% } else { %>
+            <% recentTransactions.forEach(t => { %>
+              <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid var(--border);">
+                <div class="d-flex align-items-center gap-2" style="min-width:0;">
+                  <i class="<%= t.category ? t.category.icon : 'fa-solid fa-circle' %>" style="color:<%= t.category ? t.category.color : '#94A3B8' %>;width:18px;text-align:center;"></i>
+                  <div style="min-width:0;">
+                    <div style="font-size:0.85rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;"><%= t.description %></div>
+                    <div style="font-size:0.72rem;color:var(--text-faint);"><%= new Date(t.date).toLocaleDateString('pt-BR') %> · <%= t.bank ? t.bank.name : '' %></div>
+                  </div>
+                </div>
+                <span class="amount" style="font-size:0.85rem;font-weight:700;color:<%= t.type === 'despesa' ? 'var(--danger)' : 'var(--green)' %>;">
+                  <%= t.type === 'despesa' ? '-' : '+' %> <%= t.amount.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}) %>
+                </span>
+              </div>
+            <% }) %>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- Próximas contas -->
+      <div class="col-lg-6">
+        <div class="card h-100" data-aos="fade-up" data-aos-delay="50">
+          <div class="stat-label mb-2">Próximas Contas</div>
+          <% if (upcomingBills.length === 0) { %>
+            <div class="empty-state py-3"><i class="fa-solid fa-calendar-check"></i><p class="mb-0">Nenhuma conta pendente. 🎉</p></div>
+          <% } else { %>
+            <% upcomingBills.forEach(t => { %>
+              <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid var(--border);">
+                <div>
+                  <div style="font-size:0.85rem;font-weight:600;"><%= t.description %></div>
+                  <div style="font-size:0.72rem;color:var(--text-faint);"><%= new Date(t.date).toLocaleDateString('pt-BR') %></div>
+                </div>
+                <span class="pill pill-blue"><%= t.amount.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}) %></span>
+              </div>
+            <% }) %>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<%- include('../partials/footer') %>
+
+<%- include('../partials/scripts') %>
+
+<script>
+  const categoryData = <%- categoryChartData %>;
+  const monthlyFlowData = <%- monthlyFlowData %>;
+
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  Chart.defaults.color = isDark ? '#94A3B8' : '#64748B';
+  Chart.defaults.font.family = 'Inter';
+
+  // Gráfico de categorias (rosca)
+  const catLabels = Object.keys(categoryData);
+  const catValues = Object.values(categoryData);
+  if (catLabels.length > 0) {
+    new Chart(document.getElementById('categoryChart'), {
+      type: 'doughnut',
+      data: {
+        labels: catLabels,
+        datasets: [{
+          data: catValues,
+          backgroundColor: ['#2563EB','#22C55E','#F59E0B','#EF4444','#8B5CF6','#EC4899','#06B6D4','#F97316'],
+          borderWidth: 0
+        }]
+      },
+      options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } } }
+    });
+  }
+
+  // Gráfico de fluxo de caixa (linhas)
+  const flowLabels = Object.keys(monthlyFlowData).sort();
+  new Chart(document.getElementById('flowChart'), {
+    type: 'line',
+    data: {
+      labels: flowLabels,
+      datasets: [
+        { label: 'Receitas', data: flowLabels.map(k => monthlyFlowData[k].receita || 0), borderColor: '#22C55E', backgroundColor: 'rgba(34,197,94,0.1)', tension: 0.35, fill: true },
+        { label: 'Despesas', data: flowLabels.map(k => monthlyFlowData[k].despesa || 0), borderColor: '#EF4444', backgroundColor: 'rgba(239,68,68,0.1)', tension: 0.35, fill: true }
+      ]
+    },
+    options: { plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } }
+  });
+</script>

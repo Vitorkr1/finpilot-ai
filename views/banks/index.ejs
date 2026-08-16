@@ -1,0 +1,474 @@
+<%- include('../partials/head') %>
+<div class="app-shell">
+  <%- include('../partials/sidebar') %>
+
+  <main class="main-content">
+    <div class="topbar">
+      <div>
+        <h2 class="display mb-0">Meus Bancos</h2>
+        <p style="color:var(--text-muted);margin:0;">Cadastre quantos bancos e carteiras quiser.</p>
+      </div>
+      <button class="btn-fp btn-primary-fp" data-bs-toggle="modal" data-bs-target="#bankModal" onclick="openBankModal()">
+        <i class="fa-solid fa-plus"></i> Novo Banco
+      </button>
+    </div>
+
+    <div class="row g-3" id="banksGrid">
+      <!-- preenchido via JS -->
+    </div>
+
+    <div class="empty-state d-none" id="banksEmpty">
+      <i class="fa-solid fa-building-columns"></i>
+      <p>Você ainda não cadastrou nenhum banco.</p>
+      <button class="btn-fp btn-primary-fp" data-bs-toggle="modal" data-bs-target="#bankModal" onclick="openBankModal()">Cadastrar primeiro banco</button>
+    </div>
+  </main>
+</div>
+
+<%- include('../partials/footer') %>
+
+<!-- Modal Banco -->
+<div class="modal fade" id="bankModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:20px;border:none;">
+      <div class="modal-body p-4">
+        <h5 class="display mb-3" id="bankModalTitle">Novo Banco</h5>
+        <form id="bankForm" class="form-fp">
+          <input type="hidden" name="id">
+          <div class="row g-3">
+            <div class="col-12">
+              <label>Nome do Banco</label>
+              <input type="text" class="form-control" name="name" required placeholder="Ex: Nubank, Inter, Carteira...">
+            </div>
+            <div class="col-6">
+              <label>Tipo</label>
+              <select class="form-control" name="type">
+                <% bankTypes.forEach(t => { %><option value="<%= t %>"><%= t %></option><% }) %>
+              </select>
+            </div>
+            <div class="col-6">
+              <label>Cor</label>
+              <input type="color" class="form-control" name="color" value="#2563EB" style="height:42px;">
+            </div>
+            <div class="col-12">
+              <label>Saldo Atual (R$)</label>
+              <input type="number" step="0.01" class="form-control" name="currentBalance" value="0">
+            </div>
+            <div class="col-6 d-none" id="closingDayWrap">
+              <label>Dia de fechamento da fatura</label>
+              <input type="number" min="1" max="31" class="form-control" name="closingDay" placeholder="Ex: 10">
+            </div>
+            <div class="col-6 d-none" id="dueDayWrap">
+              <label>Dia de vencimento da fatura</label>
+              <input type="number" min="1" max="31" class="form-control" name="dueDay" placeholder="Ex: 17">
+            </div>
+          </div>
+          <button type="submit" class="btn-fp btn-primary-fp w-100 py-2 mt-4" id="bankSubmitBtn">Salvar Banco</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Fatura -->
+<div class="modal fade" id="invoiceModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:20px;border:none;">
+      <div class="modal-body p-4">
+        <h5 class="display mb-1">Fatura Atual</h5>
+        <p id="invoicePeriod" style="color:var(--text-muted);font-size:0.85rem;"></p>
+        <div class="stat-value mb-3" id="invoiceTotal" style="color:var(--danger);"></div>
+        <div id="invoiceTxList" style="max-height:320px;overflow-y:auto;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Importar OFX -->
+<div class="modal fade" id="ofxModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:20px;border:none;">
+      <div class="modal-body p-4">
+        <h5 class="display mb-2">Importar extrato</h5>
+        <p style="color:var(--text-muted);font-size:0.85rem;" id="ofxBankLabel"></p>
+        <p style="color:var(--text-muted);font-size:0.8rem;">
+          Baixe o extrato no app/site do seu banco em formato <strong>OFX</strong> (geralmente em Extrato → Exportar/Salvar → Money/OFX) e envie aqui.
+          O saldo do banco é atualizado com o saldo real do extrato, e os lançamentos que ainda não existem são criados — sem duplicar se você importar o mesmo arquivo de novo.
+        </p>
+        <input type="file" id="ofxFile" accept=".ofx,.qfx" class="form-control mb-3">
+        <button class="btn-fp btn-primary-fp w-100 py-2" id="ofxImportBtn" onclick="submitOfxImport()">
+          <i class="fa-solid fa-file-arrow-up"></i> Importar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Importar CSV -->
+<div class="modal fade" id="csvModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:20px;border:none;">
+      <div class="modal-body p-4">
+        <h5 class="display mb-2">Importar extrato (CSV)</h5>
+        <p style="color:var(--text-muted);font-size:0.85rem;" id="csvBankLabel"></p>
+
+        <div id="csvStep1">
+          <p style="color:var(--text-muted);font-size:0.8rem;">Para bancos que não exportam OFX. Envie a planilha do extrato em .csv — na próxima tela você indica qual coluna é qual.</p>
+          <input type="file" id="csvFile" accept=".csv" class="form-control mb-3">
+          <button class="btn-fp btn-primary-fp w-100 py-2" id="csvPreviewBtn" onclick="submitCsvPreview()">
+            <i class="fa-solid fa-arrow-right"></i> Continuar
+          </button>
+        </div>
+
+        <div id="csvStep2" class="d-none">
+          <p style="font-size:0.8rem;color:var(--text-muted);">Confira as primeiras linhas do arquivo e diga qual coluna é qual:</p>
+          <div id="csvPreviewTable" style="overflow-x:auto;margin-bottom:1rem;"></div>
+
+          <div class="row g-2 mb-2">
+            <div class="col-4">
+              <label style="font-size:0.78rem;">Coluna da Data</label>
+              <select class="form-control" id="csvDateCol"></select>
+            </div>
+            <div class="col-4">
+              <label style="font-size:0.78rem;">Coluna da Descrição</label>
+              <select class="form-control" id="csvDescCol"></select>
+            </div>
+            <div class="col-4">
+              <label style="font-size:0.78rem;">Coluna do Valor</label>
+              <select class="form-control" id="csvAmountCol"></select>
+            </div>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label style="font-size:0.78rem;">Formato da data</label>
+              <select class="form-control" id="csvDateFormat">
+                <option value="DD/MM/YYYY">DD/MM/AAAA (31/12/2026)</option>
+                <option value="YYYY-MM-DD">AAAA-MM-DD (2026-12-31)</option>
+              </select>
+            </div>
+            <div class="col-6 d-flex align-items-end">
+              <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="csvHasHeader" checked>
+                <label class="form-check-label" style="font-size:0.85rem;" for="csvHasHeader">Primeira linha é cabeçalho</label>
+              </div>
+            </div>
+          </div>
+          <button class="btn-fp btn-primary-fp w-100 py-2" id="csvCommitBtn" onclick="submitCsvCommit()">
+            <i class="fa-solid fa-file-arrow-up"></i> Importar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/scripts') %>
+
+<script>
+  let banks = [];
+  const bankModal = new bootstrap.Modal(document.getElementById('bankModal'));
+  const invoiceModal = new bootstrap.Modal(document.getElementById('invoiceModal'));
+
+  document.querySelector('select[name="type"]').addEventListener('change', toggleCardFields);
+  function toggleCardFields() {
+    const isCard = document.querySelector('select[name="type"]').value === 'Cartão';
+    document.getElementById('closingDayWrap').classList.toggle('d-none', !isCard);
+    document.getElementById('dueDayWrap').classList.toggle('d-none', !isCard);
+  }
+
+  function openBankModal(bankOrId = null) {
+    // Aceita um objeto banco OU o _id (string) para buscar na lista em memória.
+    // Isso evita ter que embutir o objeto inteiro (JSON.stringify) dentro de um
+    // atributo onclick, o que era um risco de XSS caso o nome do banco contivesse
+    // aspas simples (quebraria o atributo e permitiria injetar HTML/JS).
+    const bank = typeof bankOrId === 'string' ? banks.find((x) => x._id === bankOrId) : bankOrId;
+    const form = document.getElementById('bankForm');
+    form.reset();
+    document.getElementById('bankModalTitle').textContent = bank ? 'Editar Banco' : 'Novo Banco';
+    // OBS: usamos form.elements.namedItem() em vez de form.id / form.name
+    // porque "id" e "name" já são propriedades nativas do elemento <form>
+    // (refletem os atributos id="" e name="" do próprio form) — acessar
+    // form.id ou form.name por ponto NUNCA retorna o <input name="id">
+    // ou <input name="name">, e sim a string do atributo do form.
+    if (bank) {
+      form.elements.namedItem('id').value = bank._id;
+      form.elements.namedItem('name').value = bank.name;
+      form.elements.namedItem('type').value = bank.type;
+      form.elements.namedItem('color').value = bank.color;
+      form.elements.namedItem('currentBalance').value = bank.currentBalance;
+      if (bank.closingDay) form.elements.namedItem('closingDay').value = bank.closingDay;
+      if (bank.dueDay) form.elements.namedItem('dueDay').value = bank.dueDay;
+    } else {
+      form.elements.namedItem('id').value = '';
+    }
+    toggleCardFields();
+    bankModal.show(); // faltava isto: o link "Editar" não tinha data-bs-toggle, então preenchia o form mas nunca abria o modal
+  }
+
+  function bankIcon(type) {
+    const icons = {
+      'Conta Corrente': 'fa-building-columns', 'Conta Poupança': 'fa-piggy-bank', 'Carteira': 'fa-wallet',
+      'Conta Digital': 'fa-mobile-screen', 'Cartão': 'fa-credit-card', 'Investimento': 'fa-chart-line', 'PIX': 'fa-qrcode'
+    };
+    return icons[type] || 'fa-building-columns';
+  }
+
+  async function loadBanks() {
+    try {
+      const data = await fpFetch('/api/banks');
+      banks = data.banks;
+      renderBanks();
+    } catch (err) {
+      fpToast(err.message, 'error');
+    }
+  }
+
+  function renderBanks() {
+    const grid = document.getElementById('banksGrid');
+    const empty = document.getElementById('banksEmpty');
+    if (banks.length === 0) {
+      grid.innerHTML = '';
+      empty.classList.remove('d-none');
+      return;
+    }
+    empty.classList.add('d-none');
+    grid.innerHTML = banks.map(b => {
+      const safeName = fpEscapeHtml(b.name);
+      const safeColor = fpEscapeHtml(b.color);
+      const safeType = fpEscapeHtml(b.type);
+      return `
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100">
+          <div class="d-flex justify-content-between align-items-start mb-3">
+            <div class="d-flex align-items-center gap-2">
+              <div style="width:42px;height:42px;border-radius:12px;background:${safeColor}22;display:flex;align-items:center;justify-content:center;">
+                <i class="fa-solid ${bankIcon(b.type)}" style="color:${safeColor};font-size:1.1rem;"></i>
+              </div>
+              <div>
+                <strong>${safeName}</strong>
+                <div style="font-size:0.72rem;color:var(--text-faint);">${safeType}</div>
+              </div>
+            </div>
+            <div class="dropdown">
+              <button class="btn-fp btn-ghost-fp" style="padding:0.3rem 0.6rem;" data-bs-toggle="dropdown"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+              <ul class="dropdown-menu dropdown-menu-end">
+                ${b.type === 'Cartão' ? `<li><a class="dropdown-item" href="#" onclick="openInvoice('${b._id}');return false;">Ver fatura</a></li>` : ''}
+                <li><a class="dropdown-item" href="#" onclick="openOfxImport('${b._id}', '${fpEscapeHtml(b.name)}');return false;"><i class="fa-solid fa-file-arrow-up"></i> Importar extrato (OFX)</a></li>
+                <li><a class="dropdown-item" href="#" onclick="openCsvImport('${b._id}', '${fpEscapeHtml(b.name)}');return false;"><i class="fa-solid fa-file-csv"></i> Importar extrato (CSV)</a></li>
+                <li><a class="dropdown-item" href="#" onclick="openBankModal('${b._id}');return false;">Editar</a></li>
+                <li><a class="dropdown-item text-danger" href="#" onclick="deleteBank('${b._id}');return false;">Excluir</a></li>
+              </ul>
+            </div>
+          </div>
+          <div class="stat-label">Saldo Atual</div>
+          <div class="stat-value" style="color:${safeColor};">${fpFormatCurrency(b.currentBalance)}</div>
+        </div>
+      </div>
+    `;
+    }).join('');
+  }
+
+  document.getElementById('bankForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('bankSubmitBtn');
+    const formData = new FormData(e.target);
+    const payload = Object.fromEntries(formData);
+    const id = payload.id;
+    delete payload.id;
+
+    fpSetLoading(btn, true);
+    try {
+      if (id) {
+        await fpFetch('/api/banks/' + id, { method: 'PUT', body: payload });
+      } else {
+        await fpFetch('/api/banks', { method: 'POST', body: payload });
+      }
+      fpToast('Banco salvo com sucesso!');
+      bankModal.hide();
+      loadBanks();
+    } catch (err) {
+      fpToast(err.message, 'error');
+    } finally {
+      fpSetLoading(btn, false);
+    }
+  });
+
+  async function deleteBank(id) {
+    if (!confirm('Deseja realmente excluir este banco?')) return;
+    try {
+      const data = await fpFetch('/api/banks/' + id, { method: 'DELETE' });
+      fpToast(data.message);
+      loadBanks();
+    } catch (err) {
+      fpToast(err.message, 'error');
+    }
+  }
+
+  async function openInvoice(id) {
+    try {
+      const data = await fpFetch('/api/banks/' + id + '/invoice');
+      const inv = data.invoice;
+      document.getElementById('invoicePeriod').textContent =
+        `Período: ${fpFormatDate(inv.periodStart)} a ${fpFormatDate(inv.periodEnd)}` +
+        (inv.dueDate ? ` · Vencimento: ${fpFormatDate(inv.dueDate)}` : '');
+      document.getElementById('invoiceTotal').textContent = fpFormatCurrency(inv.total);
+
+      const list = document.getElementById('invoiceTxList');
+      if (inv.transactions.length === 0) {
+        list.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Nenhum gasto nesta fatura ainda.</p>';
+      } else {
+        list.innerHTML = inv.transactions.map(t => `
+          <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid var(--border);">
+            <div>
+              <div style="font-weight:600;font-size:0.85rem;">${fpEscapeHtml(t.description)}</div>
+              <div style="font-size:0.72rem;color:var(--text-faint);">${fpFormatDate(t.date)}${t.category ? ' · ' + fpEscapeHtml(t.category.name) : ''}</div>
+            </div>
+            <span style="font-weight:700;color:var(--danger);">${fpFormatCurrency(t.amount)}</span>
+          </div>
+        `).join('');
+      }
+      invoiceModal.show();
+    } catch (err) {
+      fpToast(err.message, 'error');
+    }
+  }
+
+  // ---------- Importar extrato OFX ----------
+  const ofxModal = new bootstrap.Modal(document.getElementById('ofxModal'));
+  let ofxTargetBankId = null;
+
+  function openOfxImport(bankId, bankName) {
+    ofxTargetBankId = bankId;
+    document.getElementById('ofxBankLabel').textContent = 'Banco: ' + bankName;
+    document.getElementById('ofxFile').value = '';
+    ofxModal.show();
+  }
+
+  async function submitOfxImport() {
+    const fileInput = document.getElementById('ofxFile');
+    const file = fileInput.files[0];
+    if (!file) return fpToast('Selecione o arquivo .ofx do extrato.', 'error');
+
+    const btn = document.getElementById('ofxImportBtn');
+    fpSetLoading(btn, true);
+
+    try {
+      const formData = new FormData();
+      formData.append('ofxFile', file);
+
+      let res = await fetch(`/api/banks/${ofxTargetBankId}/import-ofx`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-CSRF-Token': fpCsrfToken() },
+        body: formData
+      });
+
+      if (res.status === 401) {
+        const refresh = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin' });
+        if (refresh.ok) {
+          res = await fetch(`/api/banks/${ofxTargetBankId}/import-ofx`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'X-CSRF-Token': fpCsrfToken() },
+            body: formData
+          });
+        }
+      }
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || 'Não foi possível importar o extrato.');
+
+      fpToast(data.message);
+      ofxModal.hide();
+      loadBanks();
+    } catch (err) {
+      fpToast(err.message, 'error');
+    } finally {
+      fpSetLoading(btn, false);
+    }
+  }
+
+  // ---------- Importar extrato CSV (com mapeamento de colunas) ----------
+  const csvModal = new bootstrap.Modal(document.getElementById('csvModal'));
+  let csvTargetBankId = null;
+
+  function openCsvImport(bankId, bankName) {
+    csvTargetBankId = bankId;
+    document.getElementById('csvBankLabel').textContent = 'Banco: ' + bankName;
+    document.getElementById('csvFile').value = '';
+    document.getElementById('csvStep1').classList.remove('d-none');
+    document.getElementById('csvStep2').classList.add('d-none');
+    csvModal.show();
+  }
+
+  async function fpFetchFile(url, formData) {
+    let res = await fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-Token': fpCsrfToken() }, body: formData });
+    if (res.status === 401) {
+      const refresh = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin' });
+      if (refresh.ok) {
+        res = await fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-Token': fpCsrfToken() }, body: formData });
+      }
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || 'Não foi possível processar o arquivo.');
+    return data;
+  }
+
+  async function submitCsvPreview() {
+    const file = document.getElementById('csvFile').files[0];
+    if (!file) return fpToast('Selecione o arquivo .csv.', 'error');
+
+    const btn = document.getElementById('csvPreviewBtn');
+    fpSetLoading(btn, true);
+    try {
+      const formData = new FormData();
+      formData.append('csvFile', file);
+      const data = await fpFetchFile(`/api/banks/${csvTargetBankId}/import-csv/preview`, formData);
+
+      const table = document.getElementById('csvPreviewTable');
+      table.innerHTML = '<table class="table table-sm"><tbody>' +
+        data.rows.map((row) => '<tr>' + row.map((cell) => `<td style="font-size:0.78rem;white-space:nowrap;">${fpEscapeHtml(cell)}</td>`).join('') + '</tr>').join('') +
+        '</tbody></table>';
+
+      const numCols = data.rows[0] ? data.rows[0].length : 0;
+      const options = Array.from({ length: numCols }, (_, i) => `<option value="${i}">Coluna ${i + 1}</option>`).join('');
+      ['csvDateCol', 'csvDescCol', 'csvAmountCol'].forEach((id) => {
+        document.getElementById(id).innerHTML = options;
+      });
+      document.getElementById('csvAmountCol').selectedIndex = Math.min(2, numCols - 1);
+
+      document.getElementById('csvStep1').classList.add('d-none');
+      document.getElementById('csvStep2').classList.remove('d-none');
+    } catch (err) {
+      fpToast(err.message, 'error');
+    } finally {
+      fpSetLoading(btn, false);
+    }
+  }
+
+  async function submitCsvCommit() {
+    const file = document.getElementById('csvFile').files[0];
+    const btn = document.getElementById('csvCommitBtn');
+    fpSetLoading(btn, true);
+    try {
+      const formData = new FormData();
+      formData.append('csvFile', file);
+      formData.append('dateCol', document.getElementById('csvDateCol').value);
+      formData.append('descriptionCol', document.getElementById('csvDescCol').value);
+      formData.append('amountCol', document.getElementById('csvAmountCol').value);
+      formData.append('dateFormat', document.getElementById('csvDateFormat').value);
+      formData.append('hasHeader', document.getElementById('csvHasHeader').checked);
+
+      const data = await fpFetchFile(`/api/banks/${csvTargetBankId}/import-csv/commit`, formData);
+      fpToast(data.message);
+      csvModal.hide();
+      loadBanks();
+    } catch (err) {
+      fpToast(err.message, 'error');
+    } finally {
+      fpSetLoading(btn, false);
+    }
+  }
+
+  loadBanks();
+</script>

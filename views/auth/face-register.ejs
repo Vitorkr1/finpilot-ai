@@ -1,0 +1,59 @@
+<%- include('../partials/head') %>
+<div class="auth-shell">
+  <div class="card auth-card text-center" data-aos="fade-up">
+    <div class="mb-3">
+      <img src="/img/logo.svg" width="52" height="52" alt="FinPilot AI" />
+      <h3 class="display mt-3 mb-1">Cadastrar rosto</h3>
+      <p style="color: var(--text-muted); font-size: 0.9rem">
+        Olá, <strong><%= userName %></strong>. Posicione seu rosto na câmera para ativar o login facial.
+      </p>
+    </div>
+
+    <div class="face-scan-wrap" id="faceScanWrap">
+      <video id="faceVideo" autoplay playsinline muted></video>
+      <div class="face-scan-shade"></div>
+      <div class="face-scan-hint">Cadastro facial</div>
+      <div class="face-scan-guide"><div class="scan-line"></div></div>
+      <div class="face-scan-corners">
+        <span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span>
+      </div>
+      <div class="face-scan-hold"><div class="fill" id="faceHoldFill"></div></div>
+      <div class="face-scan-status"><span class="dot"></span><span id="faceStatusText">Carregando câmera…</span></div>
+    </div>
+
+    <p class="mt-3" style="color: var(--text-faint); font-size: 0.78rem;">
+      O cadastro acontece automaticamente assim que seu rosto estiver bem posicionado.
+      Guardamos apenas uma representação matemática do seu rosto (não a foto).
+      Esse link só funciona uma vez e expira automaticamente.
+    </p>
+  </div>
+</div>
+
+<%- include('../partials/scripts') %>
+<script src="/vendor/face-api/face-api.min.js"></script>
+<link rel="stylesheet" href="/css/face-scan.css">
+<script src="/js/face-scan.js?v=<%= buildVersion %>"></script>
+
+<script>
+  const TOKEN = <%- JSON.stringify(token) %>;
+
+  const faceScan = new FaceScan({
+    wrapEl: document.getElementById("faceScanWrap"),
+    videoEl: document.getElementById("faceVideo"),
+    statusTextEl: document.getElementById("faceStatusText"),
+    holdFillEl: document.getElementById("faceHoldFill"),
+    onCapture: async (descriptor) => {
+      const data = await fpFetch("/api/faces/register", {
+        method: "POST",
+        body: { token: TOKEN, descriptor },
+      });
+      fpToast(data.message);
+      faceScan.stop();
+      setTimeout(() => { window.location.href = "/login"; }, 1800);
+    },
+  });
+
+  faceScan.start().catch(() => {
+    fpToast("Permita o acesso à câmera para continuar.", "error");
+  });
+</script>

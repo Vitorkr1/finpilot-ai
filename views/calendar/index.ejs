@@ -1,0 +1,142 @@
+<%- include('../partials/head') %>
+<div class="app-shell">
+  <%- include('../partials/sidebar') %>
+
+  <main class="main-content">
+    <div class="topbar">
+      <div>
+        <h2 class="display mb-0">Calendário de Fluxo de Caixa</h2>
+        <p style="color:var(--text-muted);margin:0;">Veja de longe onde o dinheiro entra e sai antes do dia chegar.</p>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn-fp btn-ghost-fp" onclick="changeMonth(-1)"><i class="fa-solid fa-chevron-left"></i></button>
+        <strong id="monthLabel" style="min-width:140px;text-align:center;"></strong>
+        <button class="btn-fp btn-ghost-fp" onclick="changeMonth(1)"><i class="fa-solid fa-chevron-right"></i></button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div id="calendarGrid" class="calendar-grid"></div>
+    </div>
+  </main>
+</div>
+
+<%- include('../partials/footer') %>
+
+<!-- Modal Dia -->
+<div class="modal fade" id="dayModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:20px;border:none;">
+      <div class="modal-body p-4">
+        <h5 class="display mb-3" id="dayModalTitle">Dia</h5>
+        <div id="dayModalList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .calendar-weekday { text-align: center; font-size: 0.72rem; font-weight: 700; color: var(--text-faint); padding: 0.4rem 0; }
+  .calendar-day {
+    min-height: 78px; border-radius: 10px; border: 1px solid var(--border);
+    padding: 0.4rem; cursor: pointer; transition: background 0.15s;
+  }
+  .calendar-day:hover { background: var(--bg-soft, rgba(0,0,0,0.03)); }
+  .calendar-day.empty { border: none; cursor: default; }
+  .calendar-day.today { border-color: var(--blue); border-width: 2px; }
+  .calendar-day-num { font-size: 0.78rem; font-weight: 700; }
+  .calendar-day-amt { font-size: 0.68rem; font-weight: 600; margin-top: 0.2rem; }
+  @media (max-width: 576px) {
+    .calendar-grid { gap: 3px; }
+    .calendar-day { min-height: 56px; padding: 0.25rem; }
+    .calendar-day-num { font-size: 0.7rem; }
+    .calendar-day-amt { font-size: 0.6rem; }
+  }
+</style>
+
+<%- include('../partials/scripts') %>
+
+<script>
+  const dayModal = new bootstrap.Modal(document.getElementById('dayModal'));
+  let currentMonth = new Date();
+  currentMonth.setDate(1);
+
+  function changeMonth(delta) {
+    currentMonth.setMonth(currentMonth.getMonth() + delta);
+    loadCalendar();
+  }
+
+  function monthKey(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  async function loadCalendar() {
+    document.getElementById('monthLabel').textContent = currentMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+    try {
+      const data = await fpFetch('/api/calendar?month=' + monthKey(currentMonth));
+      renderGrid(data.days);
+    } catch (err) {
+      fpToast(err.message, 'error');
+    }
+  }
+
+  function renderGrid(days) {
+    const grid = document.getElementById('calendarGrid');
+    const weekdays = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+    let html = weekdays.map((w) => `<div class="calendar-weekday">${w}</div>`).join('');
+
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+    const firstDayOfWeek = new Date(year, month, 1).getDay();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    const todayKey = new Date().toISOString().slice(0, 10);
+
+    for (let i = 0; i < firstDayOfWeek; i++) html += '<div class="calendar-day empty"></div>';
+
+    for (let day = 1; day <= totalDays; day++) {
+      const key = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const info = days[key];
+      const isToday = key === todayKey;
+      let amountsHtml = '';
+      if (info) {
+        if (info.income > 0) amountsHtml += `<div class="calendar-day-amt" style="color:var(--green);">+${fpFormatCurrency(info.income)}</div>`;
+        if (info.expense > 0) amountsHtml += `<div class="calendar-day-amt" style="color:var(--danger);">-${fpFormatCurrency(info.expense)}</div>`;
+      }
+      html += `
+        <div class="calendar-day ${isToday ? 'today' : ''}" onclick='openDay("${key}", ${JSON.stringify(info || { items: [] })})'>
+          <div class="calendar-day-num">${day}</div>
+          ${amountsHtml}
+        </div>`;
+    }
+
+    grid.innerHTML = html;
+  }
+
+  function openDay(dateKey, info) {
+    const [y, m, d] = dateKey.split('-');
+    document.getElementById('dayModalTitle').textContent = `${d}/${m}/${y}`;
+    const list = document.getElementById('dayModalList');
+
+    if (!info.items || info.items.length === 0) {
+      list.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Nada agendado nesse dia.</p>';
+    } else {
+      list.innerHTML = info.items.map((t) => {
+        const color = t.type === 'despesa' ? 'var(--danger)' : (t.type === 'receita' ? 'var(--green)' : 'var(--blue)');
+        const sign = t.type === 'despesa' ? '-' : (t.type === 'receita' ? '+' : '');
+        return `
+          <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid var(--border);">
+            <div>
+              <div style="font-weight:600;font-size:0.88rem;">${fpEscapeHtml(t.description)}</div>
+              <div style="font-size:0.75rem;color:var(--text-faint);">${fpEscapeHtml(t.bank || '')}${t.category ? ' · ' + fpEscapeHtml(t.category.name) : ''} · ${fpEscapeHtml(t.status)}</div>
+            </div>
+            <span style="font-weight:700;color:${color};">${sign} ${fpFormatCurrency(t.amount)}</span>
+          </div>`;
+      }).join('');
+    }
+    dayModal.show();
+  }
+
+  loadCalendar();
+</script>

@@ -1,0 +1,56 @@
+<%- include('../partials/head') %>
+<div class="auth-shell">
+  <div class="card auth-card" data-aos="fade-up">
+    <div class="text-center mb-4">
+      <img src="/img/logo.svg" width="52" height="52" alt="FinPilot AI">
+      <h3 class="display mt-3 mb-1">Crie sua conta</h3>
+      <p style="color:var(--text-muted);font-size:0.9rem;">Comece a organizar suas finanças com IA</p>
+    </div>
+
+    <form id="registerForm" class="form-fp">
+      <div class="mb-3">
+        <label>Nome completo</label>
+        <input type="text" class="form-control" name="name" required placeholder="Seu nome">
+      </div>
+      <div class="mb-3">
+        <label>E-mail</label>
+        <input type="email" class="form-control" name="email" required placeholder="voce@email.com">
+      </div>
+      <div class="mb-3">
+        <label>Senha</label>
+        <input type="password" class="form-control" name="password" required minlength="8" placeholder="Mínimo 8 caracteres">
+      </div>
+      <div class="mb-3">
+        <label>Confirmar senha</label>
+        <input type="password" class="form-control" name="confirmPassword" required minlength="8" placeholder="Repita a senha">
+      </div>
+      <button type="submit" class="btn-fp btn-primary-fp w-100 py-2" id="registerBtn">Criar conta</button>
+    </form>
+
+    <p class="text-center mt-4 mb-0" style="font-size:0.88rem;color:var(--text-muted);">
+      Já tem uma conta? <a href="/login">Entrar</a>
+    </p>
+  </div>
+</div>
+
+<%- include('../partials/scripts') %>
+
+<script>
+  document.getElementById('registerForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('registerBtn');
+    const formData = new FormData(e.target);
+    fpSetLoading(btn, true);
+    try {
+      const data = await fpFetch('/api/auth/register', {
+        method: 'POST',
+        body: Object.fromEntries(formData)
+      });
+      fpToast(data.message);
+      setTimeout(() => window.location.href = '/login', 1500);
+    } catch (err) {
+      fpToast(err.message, 'error');
+      fpSetLoading(btn, false);
+    }
+  });
+</script>

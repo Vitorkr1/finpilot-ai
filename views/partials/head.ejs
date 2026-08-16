@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="<%= (typeof user !== 'undefined' && user && user.theme === 'dark') ? 'dark' : 'light' %>">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title><%= title %> — FinPilot AI</title>
+  <meta name="description" content="FinPilot AI — A inteligência que cuida do seu dinheiro.">
+  <link rel="icon" type="image/svg+xml" href="/img/logo.svg">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <meta name="theme-color" content="#2563EB">
+  <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+
+  <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+  <link rel="stylesheet" href="/vendor/aos/aos.css">
+  <link rel="stylesheet" href="/css/style.css?v=<%= buildVersion %>">
+
+  <script>
+    // Aplica tema salvo localmente antes da renderização para evitar flash
+    (function () {
+      var saved = localStorage.getItem('fp-theme');
+      var attr = document.documentElement;
+      if (saved === 'dark') attr.setAttribute('data-theme', 'dark');
+      if (saved === 'light') attr.setAttribute('data-theme', 'light');
+      if (saved === 'auto' || !saved) {
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        attr.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+      }
+    })();
+  </script>
+</head>
+<body>
