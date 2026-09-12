@@ -72,6 +72,20 @@ export function ServiceOrdersPage() {
     await loadData()
   }
 
+  async function uploadPhoto(orderId: string, file: File) {
+    const formData = new FormData()
+    formData.append('photo', file)
+    setError(null)
+    try {
+      await api.post(`/service-orders/${orderId}/photos`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      await loadData()
+    } catch {
+      setError('Não foi possível enviar a foto. Verifique se o Cloudinary está configurado.')
+    }
+  }
+
   function clientName(id: string) {
     return clients.find((c) => c._id === id)?.name || '—'
   }
@@ -144,7 +158,7 @@ export function ServiceOrdersPage() {
                   ))}
                 </select>
               </div>
-              <ul className="space-y-1">
+              <ul className="mb-3 space-y-1">
                 {order.checklist.map((item, index) => (
                   <li key={index} className="flex items-center gap-2 text-sm">
                     <input
@@ -157,6 +171,27 @@ export function ServiceOrdersPage() {
                   </li>
                 ))}
               </ul>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {order.photos.map((url, i) => (
+                  <a key={i} href={url} target="_blank" rel="noreferrer">
+                    <img src={url} alt="Foto da OS" className="h-14 w-14 rounded-lg object-cover" />
+                  </a>
+                ))}
+                <label className="cursor-pointer rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-500 hover:bg-slate-50">
+                  + Foto
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) uploadPhoto(order._id, file)
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+              </div>
             </div>
           ))}
         </div>

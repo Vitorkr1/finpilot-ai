@@ -12,12 +12,32 @@ import { StockPage } from './pages/StockPage'
 import { FinancialPage } from './pages/FinancialPage'
 import { AiAssistantPage } from './pages/AiAssistantPage'
 import { WhatsAppSettingsPage } from './pages/WhatsAppSettingsPage'
+import { SuperAdminApp } from './pages/SuperAdminApp'
+
+// Caminho não linkado em nenhum menu (Seção 6) — não altere sem avisar quem
+// administra as empresas piloto.
+const SUPER_ADMIN_PATH = '/painel-criatech-k4m9vz'
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
+    <Routes>
+      <Route path={`${SUPER_ADMIN_PATH}/*`} element={<SuperAdminApp />} />
+      <Route
+        path="*"
+        element={
+          <AuthProvider>
+            <TenantRoutes />
+          </AuthProvider>
+        }
+      />
+    </Routes>
+  )
+}
+
+function TenantRoutes() {
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
         <Route
           path="/"
           element={
@@ -98,7 +118,6 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-      </Routes>
-    </AuthProvider>
+    </Routes>
   )
 }
