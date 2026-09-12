@@ -7,6 +7,11 @@ const morgan = require('morgan');
 
 const authRoutes = require('./routes/authRoutes');
 const companyRoutes = require('./routes/companyRoutes');
+const clientRoutes = require('./routes/clientRoutes');
+const budgetRoutes = require('./routes/budgetRoutes');
+const serviceOrderRoutes = require('./routes/serviceOrderRoutes');
+const appointmentRoutes = require('./routes/appointmentRoutes');
+const companyUserRoutes = require('./routes/companyUserRoutes');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 
 function createApp() {
@@ -28,6 +33,11 @@ function createApp() {
   app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
   app.use('/api/auth', authRoutes);
   app.use('/api/companies', companyRoutes);
+  app.use('/api/clients', clientRoutes);
+  app.use('/api/budgets', budgetRoutes);
+  app.use('/api/service-orders', serviceOrderRoutes);
+  app.use('/api/appointments', appointmentRoutes);
+  app.use('/api/company-users', companyUserRoutes);
 
   const clientDist = path.join(__dirname, '..', 'client', 'dist');
   app.use(express.static(clientDist));
