@@ -140,6 +140,34 @@ e filtram automaticamente por `companyId`:
   `?technicianId=`)
 - `GET/POST /api/company-users` + `PATCH /api/company-users/:id/active`
   (restrito a `admin`, aplica o limite de usuários do plano)
+- `GET/POST/PATCH/DELETE /api/stock-items` (Pro) + `POST
+  /api/service-orders/:id/materials` (baixa automática no estoque)
+- `GET/POST /api/financial-entries` + `PATCH /api/financial-entries/:id/mark-paid`
+- `GET /api/dashboard/summary`, `GET /api/clients/:id/history`, `GET
+  /api/budgets/:id/pdf`
+- `POST /api/ai/budget-draft`, `POST /api/ai/client-summary/:clientId`, `POST
+  /api/ai/ask` (Pro)
+- `POST /api/whatsapp/connect`, `GET /api/whatsapp/status`, `POST
+  /api/whatsapp/disconnect` (Pro, restrito a `admin`)
+
+## WhatsApp e IA (fase 5)
+
+- `server/services/ai.js` isola toda chamada à Groq (SDK compatível com OpenAI,
+  `baseURL: https://api.groq.com/openai/v1`, modelo em `GROQ_MODEL` — padrão
+  `llama-3.3-70b-versatile`). Trocar de provedor no futuro é mudar só este
+  arquivo.
+- `server/services/whatsapp.js` gerencia uma sessão Baileys por empresa. As
+  credenciais (`creds` + chaves de sessão) ficam no MongoDB
+  (`WhatsAppAuthFile`), nunca em disco — o Render free apaga `/server/whatsapp-sessions`
+  a cada reinício. Ao cair a conexão (ex.: o serviço "dormiu"), reconecta
+  automaticamente, exceto quando o WhatsApp desloga a sessão de verdade
+  (`DisconnectReason.loggedOut`), caso em que as credenciais são apagadas e é
+  preciso escanear o QR code de novo.
+- Mensagens recebidas são classificadas pela IA (`classifyWhatsAppMessage`) e
+  guardadas em `WhatsAppMessage` antes de cair na fila humana — a falha da IA
+  nunca derruba o recebimento da mensagem.
+- Use um número de WhatsApp dedicado para testes, nunca o número pessoal do
+  dono da empresa.
 
 ## Fases de construção
 
@@ -149,7 +177,11 @@ e filtram automaticamente por `companyId`:
    de Serviço (checklist, fotos/assinatura como campos prontos para o Cloudinary
    da fase 5), Agenda por técnico/dia, gestão de usuários da empresa com limite
    Basic/Pro já validado na API.
-3. ⏳ Estoque e Financeiro.
-4. ⏳ Dashboard e relatórios.
-5. ⏳ WhatsApp (Baileys) + assistente de IA.
+3. ✅ **Estoque e Financeiro** — estoque Pro com baixa automática na OS,
+   financeiro essencial (contas a pagar/receber) disponível em todos os planos.
+4. ✅ **Dashboard e relatórios** — indicadores básicos com gráfico, histórico de
+   serviço por cliente, geração de orçamento em PDF.
+5. ✅ **WhatsApp (Baileys) + assistente de IA** — chat de IA no dashboard,
+   orçamento assistido por IA, conexão WhatsApp por QR code com triagem
+   automática das mensagens recebidas.
 6. ⏳ Polimento do frontend, página secreta de admin, preparação final para deploy.
