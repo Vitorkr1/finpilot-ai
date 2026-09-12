@@ -17,6 +17,7 @@ const financialRoutes = require('./routes/financialRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 const whatsappRoutes = require('./routes/whatsappRoutes');
+const setupRoutes = require('./routes/setupRoutes');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 
 function createApp() {
@@ -48,6 +49,7 @@ function createApp() {
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/ai', aiRoutes);
   app.use('/api/whatsapp', whatsappRoutes);
+  app.use('/api/setup', setupRoutes);
 
   const clientDist = path.join(__dirname, '..', 'client', 'dist');
   app.use(express.static(clientDist));

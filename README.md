@@ -79,6 +79,29 @@ de produção real, já que uma URL escondida sozinha não é segurança. A API 
 trás (`/api/companies/*`) já valida `role: 'super_admin'` em toda rota,
 independentemente do caminho usado para chegar até ela.
 
+### Sem acesso a shell no host (ex. Render free)
+
+`npm run seed:super-admin` e a CLI acima rodam diretamente contra o banco, então
+precisam de um terminal com acesso à rede — algo que planos free como o do
+Render normalmente não oferecem. Para esse caso existe um bootstrap único via
+HTTP, **desligado por padrão**:
+
+1. Defina `SETUP_TOKEN` (qualquer string aleatória longa) nas variáveis de
+   ambiente do deploy, junto com `SUPER_ADMIN_EMAIL`/`SUPER_ADMIN_PASSWORD`.
+2. Faça uma requisição:
+   ```bash
+   curl -X POST https://<sua-url>.onrender.com/api/setup/bootstrap-super-admin \
+     -H "x-setup-token: <o valor de SETUP_TOKEN>"
+   ```
+3. Isso cria o super admin (mesmo efeito do `seedSuperAdmin.js`) e a partir daí
+   você já usa o painel secreto para criar as empresas — não precisa mais da
+   CLI para nada além de manutenção pontual.
+4. Remova `SETUP_TOKEN` do ambiente depois de usar. Mesmo que não remova: sem
+   a variável definida a rota responde 404 (não existe), e mesmo com o valor
+   certo ela recusa (409) qualquer chamada depois que o primeiro super admin
+   já existir — não dá para reaproveitar o token nem criar um segundo super
+   admin por essa via.
+
 ## Configurando o MongoDB Atlas (free)
 
 1. Crie uma conta em [mongodb.com/cloud/atlas](https://www.mongodb.com/cloud/atlas).
