@@ -81,3 +81,24 @@ export interface Appointment {
   endTime: string
   status: AppointmentStatus
 }
+
+export interface StockItem {
+  _id: string
+  name: string
+  sku?: string
+  quantity: number
+  minQuantity: number
+  unit: string
+}
+
+export type FinancialEntryType = 'receita' | 'despesa'
+
+export interface FinancialEntry {
+  _id: string
+  type: FinancialEntryType
+  description: string
+  amount: number
+  dueDate: string
+  paidDate: string | null
+  relatedServiceOrderId: string | null
+}

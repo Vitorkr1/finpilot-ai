@@ -9,7 +9,10 @@ const NAV_ITEMS = [
   { to: '/orcamentos', label: 'Orçamentos' },
   { to: '/ordens-de-servico', label: 'Ordens de Serviço' },
   { to: '/agenda', label: 'Agenda' },
+  { to: '/financeiro', label: 'Financeiro' },
 ]
+
+const PRO_NAV_ITEMS = [{ to: '/estoque', label: 'Estoque' }]
 
 function navClass({ isActive }: { isActive: boolean }) {
   return `rounded-lg px-3 py-1.5 text-sm font-medium ${
@@ -34,6 +37,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 {item.label}
               </NavLink>
             ))}
+            {company?.plan === 'pro' &&
+              PRO_NAV_ITEMS.map((item) => (
+                <NavLink key={item.to} to={item.to} className={navClass}>
+                  {item.label}
+                </NavLink>
+              ))}
           </nav>
           <div className="flex items-center gap-3">
             <span className="text-sm text-slate-600">{user?.name}</span>

@@ -7,6 +7,8 @@ import { ClientsPage } from './pages/ClientsPage'
 import { BudgetsPage } from './pages/BudgetsPage'
 import { ServiceOrdersPage } from './pages/ServiceOrdersPage'
 import { AgendaPage } from './pages/AgendaPage'
+import { StockPage } from './pages/StockPage'
+import { FinancialPage } from './pages/FinancialPage'
 
 export default function App() {
   return (
@@ -50,6 +52,22 @@ export default function App() {
           element={
             <ProtectedRoute>
               <AgendaPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/estoque"
+          element={
+            <ProtectedRoute>
+              <StockPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/financeiro"
+          element={
+            <ProtectedRoute>
+              <FinancialPage />
             </ProtectedRoute>
           }
         />
