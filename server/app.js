@@ -23,6 +23,12 @@ const { notFound, errorHandler } = require('./middleware/errorHandler');
 function createApp() {
   const app = express();
 
+  // Necessário atrás do proxy reverso do Render (e de qualquer PaaS) para que
+  // req.ip e o express-rate-limit leiam o IP real do cliente via X-Forwarded-For.
+  if (process.env.TRUST_PROXY) {
+    app.set('trust proxy', process.env.TRUST_PROXY);
+  }
+
   app.use(helmet());
   app.use(
     cors({
