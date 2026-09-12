@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { AppLayout } from '../components/AppLayout'
 import { api } from '../lib/api'
 import type { Client } from '../lib/types'
@@ -109,6 +110,9 @@ export function ClientsPage() {
                   <td className="px-4 py-2 text-slate-600">{c.phone || '-'}</td>
                   <td className="px-4 py-2 text-slate-600">{c.document || '-'}</td>
                   <td className="px-4 py-2 text-right">
+                    <Link to={`/clientes/${c._id}/historico`} className="mr-3 text-brand-600 hover:underline">
+                      Histórico
+                    </Link>
                     <button onClick={() => handleDelete(c._id)} className="text-red-600 hover:underline">
                       Excluir
                     </button>

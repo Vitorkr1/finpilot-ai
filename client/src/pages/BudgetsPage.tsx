@@ -77,6 +77,13 @@ export function BudgetsPage() {
     await loadData()
   }
 
+  async function downloadPdf(id: string) {
+    const { data } = await api.get(`/budgets/${id}/pdf`, { responseType: 'blob' })
+    const url = URL.createObjectURL(data as Blob)
+    window.open(url, '_blank')
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }
+
   const total = items.reduce((sum, it) => sum + it.qty * it.unitPrice, 0)
 
   return (
@@ -190,6 +197,9 @@ export function BudgetsPage() {
                   {b.convertedToServiceOrder && (
                     <span className="text-xs font-medium text-green-700">Convertido em OS</span>
                   )}
+                  <button onClick={() => downloadPdf(b._id)} className="text-sm text-brand-600 hover:underline">
+                    Baixar PDF
+                  </button>
                 </div>
               </div>
             </div>

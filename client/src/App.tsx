@@ -4,6 +4,7 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ClientsPage } from './pages/ClientsPage'
+import { ClientHistoryPage } from './pages/ClientHistoryPage'
 import { BudgetsPage } from './pages/BudgetsPage'
 import { ServiceOrdersPage } from './pages/ServiceOrdersPage'
 import { AgendaPage } from './pages/AgendaPage'
@@ -28,6 +29,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <ClientsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/clientes/:id/historico"
+          element={
+            <ProtectedRoute>
+              <ClientHistoryPage />
             </ProtectedRoute>
           }
         />
