@@ -118,13 +118,37 @@ senha temporária no terminal — repasse com segurança e peça a troca no prim
   super admin (via CLI ou, futuramente, o painel secreto).
 - **Preço do plano (`Company.price`)** fica editável no banco/CLI, nunca fixo na
   interface — os planos ainda não têm valor definido.
+- **Limite de usuários por plano** (Basic: 3, Pro: 30) é checado no
+  `userController.create`, bloqueando na API — nunca só escondendo botão no
+  frontend.
+- **Checklist de OS**: todo tenant usa o checklist fixo simples por padrão. O
+  checklist dinâmico por segmento (`server/services/checklistTemplates.js`) só é
+  aplicado na criação da OS para empresas no plano Pro, e a rota que expõe os
+  templates (`GET /api/service-orders/checklist-template/:segment`) está atrás de
+  `requirePlan('pro')`.
+
+## API operacional (fase 2)
+
+Todas as rotas abaixo exigem sessão autenticada de um usuário de empresa (tenant)
+e filtram automaticamente por `companyId`:
+
+- `GET/POST/PATCH/DELETE /api/clients`
+- `GET/POST/PATCH/DELETE /api/budgets` + `POST /api/budgets/:id/convert` (orçamento
+  aprovado → ordem de serviço)
+- `GET/POST/PATCH/DELETE /api/service-orders`
+- `GET/POST/PATCH/DELETE /api/appointments` (agenda, filtrável por `?date=` e
+  `?technicianId=`)
+- `GET/POST /api/company-users` + `PATCH /api/company-users/:id/active`
+  (restrito a `admin`, aplica o limite de usuários do plano)
 
 ## Fases de construção
 
 1. ✅ **Fundação** — monorepo, MongoDB, `Company`/`User`, auth JWT, seed do super
    admin, CLI de admin, shell de login/dashboard no frontend.
-2. ⏳ Núcleo operacional — Clientes, Orçamentos, Ordens de Serviço, Agenda, com
-   feature gating Basic/Pro.
+2. ✅ **Núcleo operacional** — Clientes, Orçamentos (com conversão em OS), Ordens
+   de Serviço (checklist, fotos/assinatura como campos prontos para o Cloudinary
+   da fase 5), Agenda por técnico/dia, gestão de usuários da empresa com limite
+   Basic/Pro já validado na API.
 3. ⏳ Estoque e Financeiro.
 4. ⏳ Dashboard e relatórios.
 5. ⏳ WhatsApp (Baileys) + assistente de IA.
