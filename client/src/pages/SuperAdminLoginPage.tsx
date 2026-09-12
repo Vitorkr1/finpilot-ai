@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSuperAdminAuth } from '../context/SuperAdminAuthContext'
 import { DarkFooter } from '../components/DarkFooter'
+import { SUPER_ADMIN_PATH } from '../lib/superAdminPath'
 
 export function SuperAdminLoginPage() {
   const { login } = useSuperAdminAuth()
@@ -17,7 +18,7 @@ export function SuperAdminLoginPage() {
     setSubmitting(true)
     try {
       await login(email, password)
-      navigate('.', { replace: true })
+      navigate(SUPER_ADMIN_PATH, { replace: true })
     } catch {
       setError('Credenciais inválidas.')
     } finally {
