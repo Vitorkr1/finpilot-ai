@@ -1,10 +1,12 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { api, setAccessToken } from '../lib/api'
+import { api, setAccessToken, setRefreshEndpoint } from '../lib/api'
 import type { User } from '../lib/types'
 
 // Contexto de autenticação separado do AuthContext dos tenants — login
 // próprio do super admin (Seção 6 do spec: "completamente separado do login
-// dos tenants", nunca só uma URL escondida).
+// dos tenants", nunca só uma URL escondida). Usa /auth/admin-login e
+// /auth/admin-refresh, com cookie de sessão próprio, para nunca colidir com
+// a sessão de um tenant aberta no mesmo navegador.
 interface SuperAdminAuthValue {
   user: User | null
   loading: boolean
@@ -19,16 +21,12 @@ export function SuperAdminAuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    setRefreshEndpoint('/auth/admin-refresh')
     ;(async () => {
       try {
-        const { data } = await api.post('/auth/refresh')
+        const { data } = await api.post('/auth/admin-refresh')
         setAccessToken(data.accessToken)
-        const me = await api.get('/auth/me')
-        if (me.data.user.role === 'super_admin') {
-          setUser(me.data.user)
-        } else {
-          setAccessToken(null)
-        }
+        setUser(data.user)
       } catch {
         setAccessToken(null)
       } finally {
@@ -38,11 +36,8 @@ export function SuperAdminAuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   async function login(email: string, password: string) {
-    const { data } = await api.post('/auth/login', { email, password })
-    if (data.user.role !== 'super_admin') {
-      setAccessToken(null)
-      throw new Error('Esta conta não é de super admin')
-    }
+    setRefreshEndpoint('/auth/admin-refresh')
+    const { data } = await api.post('/auth/admin-login', { email, password })
     setAccessToken(data.accessToken)
     setUser(data.user)
   }
