@@ -12,6 +12,8 @@ const budgetRoutes = require('./routes/budgetRoutes');
 const serviceOrderRoutes = require('./routes/serviceOrderRoutes');
 const appointmentRoutes = require('./routes/appointmentRoutes');
 const companyUserRoutes = require('./routes/companyUserRoutes');
+const stockRoutes = require('./routes/stockRoutes');
+const financialRoutes = require('./routes/financialRoutes');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 
 function createApp() {
@@ -38,6 +40,8 @@ function createApp() {
   app.use('/api/service-orders', serviceOrderRoutes);
   app.use('/api/appointments', appointmentRoutes);
   app.use('/api/company-users', companyUserRoutes);
+  app.use('/api/stock-items', stockRoutes);
+  app.use('/api/financial-entries', financialRoutes);
 
   const clientDist = path.join(__dirname, '..', 'client', 'dist');
   app.use(express.static(clientDist));

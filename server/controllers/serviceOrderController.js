@@ -2,9 +2,15 @@ const { z } = require('zod');
 const ServiceOrder = require('../models/ServiceOrder');
 const Client = require('../models/Client');
 const User = require('../models/User');
+const StockItem = require('../models/StockItem');
 const { getTemplate, getDefaultChecklist } = require('../services/checklistTemplates');
 const asyncHandler = require('../utils/asyncHandler');
 const { logAction } = require('../services/audit');
+
+const addMaterialSchema = z.object({
+  stockItemId: z.string().min(1),
+  qty: z.number().positive(),
+});
 
 const createSchema = z.object({
   clientId: z.string().min(1),
@@ -84,4 +90,36 @@ const checklistTemplate = asyncHandler(async (req, res) => {
   res.json({ checklist: getTemplate(req.params.segment) });
 });
 
-module.exports = { list, getOne, create, update, remove, checklistTemplate };
+// Estoque é recurso Pro (Seção 5): baixa automática no estoque ao registrar
+// material usado na OS. Decrementa de forma atômica (só se houver saldo).
+const addMaterial = asyncHandler(async (req, res) => {
+  const { stockItemId, qty } = addMaterialSchema.parse(req.body);
+
+  const order = await ServiceOrder.findOne({ _id: req.params.id, companyId: req.user.companyId });
+  if (!order) return res.status(404).json({ error: 'Ordem de serviço não encontrada' });
+
+  const stockItem = await StockItem.findOneAndUpdate(
+    { _id: stockItemId, companyId: req.user.companyId, quantity: { $gte: qty } },
+    { $inc: { quantity: -qty } },
+    { new: true }
+  );
+  if (!stockItem) {
+    return res.status(409).json({ error: 'Estoque insuficiente ou item não encontrado' });
+  }
+
+  order.materialsUsed.push({ stockItemId, qty });
+  await order.save();
+
+  await logAction({
+    companyId: req.user.companyId,
+    userId: req.user._id,
+    action: 'add-material',
+    entity: 'ServiceOrder',
+    entityId: order._id,
+    details: { stockItemId, qty },
+  });
+
+  res.status(201).json(order);
+});
+
+module.exports = { list, getOne, create, update, remove, checklistTemplate, addMaterial };

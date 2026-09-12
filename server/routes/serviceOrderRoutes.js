@@ -1,7 +1,7 @@
 const express = require('express');
 const { requireAuth, requireTenant, requirePlan } = require('../middleware/auth');
 const loadCompany = require('../middleware/loadCompany');
-const { list, getOne, create, update, remove, checklistTemplate } = require('../controllers/serviceOrderController');
+const { list, getOne, create, update, remove, checklistTemplate, addMaterial } = require('../controllers/serviceOrderController');
 
 const router = express.Router();
 
@@ -12,5 +12,6 @@ router.get('/:id', getOne);
 router.post('/', create);
 router.patch('/:id', update);
 router.delete('/:id', remove);
+router.post('/:id/materials', requirePlan('pro'), addMaterial);
 
 module.exports = router;
