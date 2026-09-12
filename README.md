@@ -72,12 +72,19 @@ senha temporária no terminal — repasse com segurança e peça a troca no prim
 ### Painel secreto (opcional, além da CLI)
 
 Além da CLI, existe uma tela web para as mesmas ações: `/painel-criatech-k4m9vz`
-(constante `SUPER_ADMIN_PATH` em `client/src/App.tsx`). Não está linkada em
-nenhum menu do tenant e tem **login próprio**, separado do login das empresas
-(`SuperAdminAuthContext`) — mesmo assim, troque esse caminho antes de um deploy
-de produção real, já que uma URL escondida sozinha não é segurança. A API por
-trás (`/api/companies/*`) já valida `role: 'super_admin'` em toda rota,
+(constante `SUPER_ADMIN_PATH` em `client/src/lib/superAdminPath.ts`). Não está
+linkada em nenhum menu do tenant e tem **login próprio**, separado do login das
+empresas — mesmo assim, troque esse caminho antes de um deploy de produção
+real, já que uma URL escondida sozinha não é segurança. A API por trás
+(`/api/companies/*`) já valida `role: 'super_admin'` em toda rota,
 independentemente do caminho usado para chegar até ela.
+
+A separação é de verdade, não só de tela: o login do super admin
+(`POST /api/auth/admin-login`) e o refresh dele (`POST /api/auth/admin-refresh`)
+usam um cookie próprio (`adminRefreshToken`), diferente do cookie do login de
+tenant (`refreshToken`). Isso evita que abrir os dois no mesmo navegador faça
+uma sessão pisar na outra — `/api/auth/login` inclusive recusa contas
+`super_admin`, e `/api/auth/admin-login` recusa qualquer conta que não seja.
 
 ### Sem acesso a shell no host (ex. Render free)
 
@@ -130,7 +137,11 @@ HTTP, **desligado por padrão**:
 3. **Start Command:** `npm start`
 4. Configure todas as variáveis de `.env.example` em *Environment*, incluindo
    `TRUST_PROXY=1` (o Render fica atrás de um proxy reverso — sem isso,
-   `express-rate-limit` não consegue distinguir os IPs reais dos clientes).
+   `express-rate-limit` não consegue distinguir os IPs reais dos clientes) e
+   `CLIENT_URL` com a URL pública do próprio serviço (ex.
+   `https://seuapp.onrender.com` ou seu domínio customizado) depois do
+   primeiro deploy — como o Express serve o front e a API na mesma origem,
+   deixar em branco não quebra nada hoje, mas é o valor correto para o CORS.
 5. O serviço free "dorme" após ~15 min sem tráfego (leva 30-60s para acordar na
    próxima requisição). Isso afeta a sessão do WhatsApp (Baileys), que depende de
    conexão constante — implementamos reconexão automática, mas um serviço externo
@@ -161,6 +172,13 @@ HTTP, **desligado por padrão**:
   aplicado na criação da OS para empresas no plano Pro, e a rota que expõe os
   templates (`GET /api/service-orders/checklist-template/:segment`) está atrás de
   `requirePlan('pro')`.
+- **Erros de chave duplicada do MongoDB** (ex.: e-mail já cadastrado) viram um
+  409 com mensagem em português no `errorHandler` global — nunca um 500 cru
+  vazando o erro interno do driver.
+- **Erros do provedor de IA** (`server/services/ai.js`) são sempre normalizados
+  para 502 com uma mensagem diagnosticável, em vez de repassar o status HTTP
+  bruto que a Groq devolve (um 404 de "modelo não existe", por exemplo,
+  chegava indistinguível de uma rota inexistente da nossa própria API).
 
 ## API operacional (fase 2)
 
@@ -200,7 +218,10 @@ As rotas abaixo são exclusivas do super admin (`role: 'super_admin'`, sem
 - `server/services/ai.js` isola toda chamada à Groq (SDK compatível com OpenAI,
   `baseURL: https://api.groq.com/openai/v1`, modelo em `GROQ_MODEL` — padrão
   `llama-3.3-70b-versatile`). Trocar de provedor no futuro é mudar só este
-  arquivo.
+  arquivo. Se o assistente passar a responder **502 "falha ao falar com o
+  provedor de IA"**, a mensagem já traz o motivo devolvido pela Groq (ex.:
+  modelo descontinuado) — confira os modelos disponíveis em
+  console.groq.com/docs/models e ajuste `GROQ_MODEL`.
 - `server/services/whatsapp.js` gerencia uma sessão Baileys por empresa. As
   credenciais (`creds` + chaves de sessão) ficam no MongoDB
   (`WhatsAppAuthFile`), nunca em disco — o Render free apaga `/server/whatsapp-sessions`
