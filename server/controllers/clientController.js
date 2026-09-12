@@ -1,5 +1,7 @@
 const { z } = require('zod');
 const Client = require('../models/Client');
+const Budget = require('../models/Budget');
+const ServiceOrder = require('../models/ServiceOrder');
 const asyncHandler = require('../utils/asyncHandler');
 const { logAction } = require('../services/audit');
 
@@ -48,4 +50,16 @@ const remove = asyncHandler(async (req, res) => {
   res.status(204).end();
 });
 
-module.exports = { list, getOne, create, update, remove };
+const history = asyncHandler(async (req, res) => {
+  const client = await Client.findOne({ _id: req.params.id, companyId: req.user.companyId });
+  if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
+
+  const [budgets, serviceOrders] = await Promise.all([
+    Budget.find({ clientId: client._id, companyId: req.user.companyId }).sort({ createdAt: -1 }),
+    ServiceOrder.find({ clientId: client._id, companyId: req.user.companyId }).sort({ createdAt: -1 }),
+  ]);
+
+  res.json({ client, budgets, serviceOrders });
+});
+
+module.exports = { list, getOne, create, update, remove, history };

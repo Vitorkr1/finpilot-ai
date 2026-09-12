@@ -1,16 +1,11 @@
 const express = require('express');
 const { requireAuth, requireTenant } = require('../middleware/auth');
 const loadCompany = require('../middleware/loadCompany');
-const { list, getOne, create, update, remove, history } = require('../controllers/clientController');
+const { summary } = require('../controllers/dashboardController');
 
 const router = express.Router();
 
 router.use(requireAuth, requireTenant, loadCompany);
-router.get('/', list);
-router.get('/:id/history', history);
-router.get('/:id', getOne);
-router.post('/', create);
-router.patch('/:id', update);
-router.delete('/:id', remove);
+router.get('/summary', summary);
 
 module.exports = router;

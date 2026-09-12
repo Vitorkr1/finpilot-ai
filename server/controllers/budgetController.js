@@ -3,6 +3,7 @@ const Budget = require('../models/Budget');
 const Client = require('../models/Client');
 const ServiceOrder = require('../models/ServiceOrder');
 const { getDefaultChecklist } = require('../services/checklistTemplates');
+const { generateBudgetPdf } = require('../services/pdf');
 const asyncHandler = require('../utils/asyncHandler');
 const { logAction } = require('../services/audit');
 
@@ -105,4 +106,16 @@ const convertToServiceOrder = asyncHandler(async (req, res) => {
   res.status(201).json(serviceOrder);
 });
 
-module.exports = { list, getOne, create, update, remove, convertToServiceOrder };
+const downloadPdf = asyncHandler(async (req, res) => {
+  const budget = await Budget.findOne({ _id: req.params.id, companyId: req.user.companyId });
+  if (!budget) return res.status(404).json({ error: 'Orçamento não encontrado' });
+
+  const client = await Client.findOne({ _id: budget.clientId, companyId: req.user.companyId });
+  const pdfBuffer = await generateBudgetPdf({ budget, client, company: req.company });
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="orcamento-${budget._id}.pdf"`);
+  res.send(pdfBuffer);
+});
+
+module.exports = { list, getOne, create, update, remove, convertToServiceOrder, downloadPdf };
