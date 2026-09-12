@@ -24,6 +24,14 @@ function checkSetupToken(req, res) {
   return true;
 }
 
+// O schema de User normaliza email com trim+lowercase ao salvar — precisamos
+// normalizar do mesmo jeito antes de usar o valor em uma query, senão um
+// espaço ou maiúscula a mais em SUPER_ADMIN_EMAIL nunca bate com o que foi
+// persistido.
+function normalizedEmail() {
+  return (process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase();
+}
+
 // Bootstrap de uso único: cria o super admin sem exigir shell no host nem
 // formulário público de cadastro. Depois que o primeiro super_admin existir,
 // a rota fica permanentemente bloqueada (409), mesmo que o token vaze ou
@@ -36,7 +44,7 @@ const bootstrapSuperAdmin = asyncHandler(async (req, res) => {
     return res.status(409).json({ error: 'Super admin já inicializado — este bootstrap está desativado permanentemente.' });
   }
 
-  const email = process.env.SUPER_ADMIN_EMAIL;
+  const email = normalizedEmail();
   const password = process.env.SUPER_ADMIN_PASSWORD;
   if (!email || !password) {
     return res.status(500).json({ error: 'SUPER_ADMIN_EMAIL/SUPER_ADMIN_PASSWORD não configurados no ambiente' });
@@ -62,7 +70,7 @@ const bootstrapSuperAdmin = asyncHandler(async (req, res) => {
 const resetSuperAdminPassword = asyncHandler(async (req, res) => {
   if (!checkSetupToken(req, res)) return;
 
-  const email = process.env.SUPER_ADMIN_EMAIL;
+  const email = normalizedEmail();
   const password = process.env.SUPER_ADMIN_PASSWORD;
   if (!email || !password) {
     return res.status(500).json({ error: 'SUPER_ADMIN_EMAIL/SUPER_ADMIN_PASSWORD não configurados no ambiente' });
@@ -70,7 +78,12 @@ const resetSuperAdminPassword = asyncHandler(async (req, res) => {
 
   const user = await User.findOne({ email, role: 'super_admin' });
   if (!user) {
-    return res.status(404).json({ error: `Nenhum super admin encontrado com o e-mail ${email}` });
+    const anyExists = await User.exists({ role: 'super_admin' });
+    return res.status(404).json({
+      error: anyExists
+        ? `Existe um super admin cadastrado, mas nenhum com o e-mail "${email}" — confira se SUPER_ADMIN_EMAIL no Render está exatamente igual ao usado quando a conta foi criada.`
+        : 'Nenhum super admin existe ainda — use POST /api/setup/bootstrap-super-admin primeiro.',
+    });
   }
 
   user.passwordHash = await User.hashPassword(password);
