@@ -7,6 +7,16 @@ const morgan = require('morgan');
 
 const authRoutes = require('./routes/authRoutes');
 const companyRoutes = require('./routes/companyRoutes');
+const clientRoutes = require('./routes/clientRoutes');
+const budgetRoutes = require('./routes/budgetRoutes');
+const serviceOrderRoutes = require('./routes/serviceOrderRoutes');
+const appointmentRoutes = require('./routes/appointmentRoutes');
+const companyUserRoutes = require('./routes/companyUserRoutes');
+const stockRoutes = require('./routes/stockRoutes');
+const financialRoutes = require('./routes/financialRoutes');
+const dashboardRoutes = require('./routes/dashboardRoutes');
+const aiRoutes = require('./routes/aiRoutes');
+const whatsappRoutes = require('./routes/whatsappRoutes');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 
 function createApp() {
@@ -28,6 +38,16 @@ function createApp() {
   app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
   app.use('/api/auth', authRoutes);
   app.use('/api/companies', companyRoutes);
+  app.use('/api/clients', clientRoutes);
+  app.use('/api/budgets', budgetRoutes);
+  app.use('/api/service-orders', serviceOrderRoutes);
+  app.use('/api/appointments', appointmentRoutes);
+  app.use('/api/company-users', companyUserRoutes);
+  app.use('/api/stock-items', stockRoutes);
+  app.use('/api/financial-entries', financialRoutes);
+  app.use('/api/dashboard', dashboardRoutes);
+  app.use('/api/ai', aiRoutes);
+  app.use('/api/whatsapp', whatsappRoutes);
 
   const clientDist = path.join(__dirname, '..', 'client', 'dist');
   app.use(express.static(clientDist));

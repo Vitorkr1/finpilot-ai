@@ -69,6 +69,16 @@ npm run admin -- delete --company <id>
 `create-company` também cria o primeiro usuário `admin` da empresa e imprime uma
 senha temporária no terminal — repasse com segurança e peça a troca no primeiro login.
 
+### Painel secreto (opcional, além da CLI)
+
+Além da CLI, existe uma tela web para as mesmas ações: `/painel-criatech-k4m9vz`
+(constante `SUPER_ADMIN_PATH` em `client/src/App.tsx`). Não está linkada em
+nenhum menu do tenant e tem **login próprio**, separado do login das empresas
+(`SuperAdminAuthContext`) — mesmo assim, troque esse caminho antes de um deploy
+de produção real, já que uma URL escondida sozinha não é segurança. A API por
+trás (`/api/companies/*`) já valida `role: 'super_admin'` em toda rota,
+independentemente do caminho usado para chegar até ela.
+
 ## Configurando o MongoDB Atlas (free)
 
 1. Crie uma conta em [mongodb.com/cloud/atlas](https://www.mongodb.com/cloud/atlas).
@@ -118,14 +128,103 @@ senha temporária no terminal — repasse com segurança e peça a troca no prim
   super admin (via CLI ou, futuramente, o painel secreto).
 - **Preço do plano (`Company.price`)** fica editável no banco/CLI, nunca fixo na
   interface — os planos ainda não têm valor definido.
+- **Limite de usuários por plano** (Basic: 3, Pro: 30) é checado no
+  `userController.create`, bloqueando na API — nunca só escondendo botão no
+  frontend.
+- **Checklist de OS**: todo tenant usa o checklist fixo simples por padrão. O
+  checklist dinâmico por segmento (`server/services/checklistTemplates.js`) só é
+  aplicado na criação da OS para empresas no plano Pro, e a rota que expõe os
+  templates (`GET /api/service-orders/checklist-template/:segment`) está atrás de
+  `requirePlan('pro')`.
+
+## API operacional (fase 2)
+
+Todas as rotas abaixo exigem sessão autenticada de um usuário de empresa (tenant)
+e filtram automaticamente por `companyId`:
+
+- `GET/POST/PATCH/DELETE /api/clients`
+- `GET/POST/PATCH/DELETE /api/budgets` + `POST /api/budgets/:id/convert` (orçamento
+  aprovado → ordem de serviço)
+- `GET/POST/PATCH/DELETE /api/service-orders`
+- `GET/POST/PATCH/DELETE /api/appointments` (agenda, filtrável por `?date=` e
+  `?technicianId=`)
+- `GET/POST /api/company-users` + `PATCH /api/company-users/:id/active`
+  (restrito a `admin`, aplica o limite de usuários do plano)
+- `GET/POST/PATCH/DELETE /api/stock-items` (Pro) + `POST
+  /api/service-orders/:id/materials` (baixa automática no estoque)
+- `GET/POST /api/financial-entries` + `PATCH /api/financial-entries/:id/mark-paid`
+- `GET /api/dashboard/summary`, `GET /api/clients/:id/history`, `GET
+  /api/budgets/:id/pdf`
+- `POST /api/ai/budget-draft`, `POST /api/ai/client-summary/:clientId`, `POST
+  /api/ai/ask` (Pro)
+- `POST /api/whatsapp/connect`, `GET /api/whatsapp/status`, `POST
+  /api/whatsapp/disconnect` (Pro, restrito a `admin`)
+
+As rotas abaixo são exclusivas do super admin (`role: 'super_admin'`, sem
+`companyId`), usadas pela CLI e pelo painel secreto:
+
+- `GET /api/companies`, `GET /api/companies/:id`
+- `POST /api/companies` (cria a empresa + primeiro usuário admin)
+- `PATCH /api/companies/:id` (edita nome/cnpj/segmento/preço)
+- `PATCH /api/companies/:id/plan`, `PATCH /api/companies/:id/mark-paid`, `PATCH
+  /api/companies/:id/suspend`
+- `DELETE /api/companies/:id` (exige `{ confirm: true }` no corpo)
+
+## WhatsApp e IA (fase 5)
+
+- `server/services/ai.js` isola toda chamada à Groq (SDK compatível com OpenAI,
+  `baseURL: https://api.groq.com/openai/v1`, modelo em `GROQ_MODEL` — padrão
+  `llama-3.3-70b-versatile`). Trocar de provedor no futuro é mudar só este
+  arquivo.
+- `server/services/whatsapp.js` gerencia uma sessão Baileys por empresa. As
+  credenciais (`creds` + chaves de sessão) ficam no MongoDB
+  (`WhatsAppAuthFile`), nunca em disco — o Render free apaga `/server/whatsapp-sessions`
+  a cada reinício. Ao cair a conexão (ex.: o serviço "dormiu"), reconecta
+  automaticamente, exceto quando o WhatsApp desloga a sessão de verdade
+  (`DisconnectReason.loggedOut`), caso em que as credenciais são apagadas e é
+  preciso escanear o QR code de novo.
+- Mensagens recebidas são classificadas pela IA (`classifyWhatsAppMessage`) e
+  guardadas em `WhatsAppMessage` antes de cair na fila humana — a falha da IA
+  nunca derruba o recebimento da mensagem.
+- Use um número de WhatsApp dedicado para testes, nunca o número pessoal do
+  dono da empresa.
 
 ## Fases de construção
 
 1. ✅ **Fundação** — monorepo, MongoDB, `Company`/`User`, auth JWT, seed do super
    admin, CLI de admin, shell de login/dashboard no frontend.
-2. ⏳ Núcleo operacional — Clientes, Orçamentos, Ordens de Serviço, Agenda, com
-   feature gating Basic/Pro.
-3. ⏳ Estoque e Financeiro.
-4. ⏳ Dashboard e relatórios.
-5. ⏳ WhatsApp (Baileys) + assistente de IA.
-6. ⏳ Polimento do frontend, página secreta de admin, preparação final para deploy.
+2. ✅ **Núcleo operacional** — Clientes, Orçamentos (com conversão em OS), Ordens
+   de Serviço (checklist, upload de fotos/assinatura direto para o Cloudinary),
+   Agenda por técnico/dia, gestão de usuários da empresa com limite Basic/Pro
+   já validado na API.
+3. ✅ **Estoque e Financeiro** — estoque Pro com baixa automática na OS,
+   financeiro essencial (contas a pagar/receber) disponível em todos os planos.
+4. ✅ **Dashboard e relatórios** — indicadores básicos com gráfico, histórico de
+   serviço por cliente, geração de orçamento em PDF.
+5. ✅ **WhatsApp (Baileys) + assistente de IA** — chat de IA no dashboard,
+   orçamento assistido por IA, conexão WhatsApp por QR code com triagem
+   automática das mensagens recebidas.
+6. ✅ **Polimento e preparação para deploy** — API completa de gestão de
+   empresas (super admin), painel secreto web além da CLI, rodapé em todas as
+   páginas (inclusive no painel admin), README com passo a passo de deploy.
+
+## Checklist antes de considerar pronto
+
+- [x] Login e isolamento por `companyId` — toda query operacional filtra por
+  `req.user.companyId`; testado via schema/middleware, recomenda-se validar
+  também com duas empresas reais no MongoDB Atlas antes de ir a produção.
+- [x] Feature gating Basic/Pro bloqueando na API (`requirePlan`), não só
+  escondendo botão — estoque, checklist dinâmico, IA e WhatsApp.
+- [x] Senha nunca aparece em log nem em resposta de API (`User.toJSON` remove
+  `passwordHash`; senhas temporárias só retornam uma vez, na criação).
+- [x] Upload de foto de OS sobrevive a um redeploy — `POST
+  /api/service-orders/:id/photos` e `.../signature` (`multer` em memória +
+  `server/services/cloudinary.js`) enviam o arquivo direto para o Cloudinary,
+  nunca gravam no disco local. Confirme na prática assim que
+  `CLOUDINARY_*` estiver configurado num ambiente real: suba uma foto, faça um
+  redeploy e verifique se a URL continua funcionando.
+- [x] CLI de admin cria empresa, muda plano, marca pago, suspende e exclui,
+  com confirmação antes de excluir.
+- [x] Rodapé com "Powered by CriaTech" (link) e WhatsApp de suporte em todas
+  as páginas, incluindo o painel secreto.
+- [x] README permite a qualquer pessoa clonar e rodar do zero.
