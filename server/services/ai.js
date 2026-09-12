@@ -6,7 +6,10 @@ const OpenAI = require('openai');
 // Configurável porque provedores descontinuam/renomeiam modelos com o tempo —
 // se este endpoint passar a responder 502 "falha ao falar com a IA", confira
 // os modelos disponíveis em console.groq.com/docs/models e ajuste GROQ_MODEL.
-const MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+// Os modelos Llama saíram do plano padrão de desenvolvedor (agora exigem
+// contato comercial com a Groq); openai/gpt-oss-20b é o modelo de produção
+// mais barato com preço aberto no momento.
+const MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
 
 let client = null;
 function getClient() {

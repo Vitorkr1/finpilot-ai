@@ -217,10 +217,13 @@ As rotas abaixo são exclusivas do super admin (`role: 'super_admin'`, sem
 
 - `server/services/ai.js` isola toda chamada à Groq (SDK compatível com OpenAI,
   `baseURL: https://api.groq.com/openai/v1`, modelo em `GROQ_MODEL` — padrão
-  `llama-3.3-70b-versatile`). Trocar de provedor no futuro é mudar só este
-  arquivo. Se o assistente passar a responder **502 "falha ao falar com o
-  provedor de IA"**, a mensagem já traz o motivo devolvido pela Groq (ex.:
-  modelo descontinuado) — confira os modelos disponíveis em
+  `openai/gpt-oss-20b`). Trocar de provedor no futuro é mudar só este arquivo.
+  Os modelos Llama (`llama-3.1-8b-instant`, `llama-3.3-70b-versatile`) saíram
+  do plano padrão de desenvolvedor da Groq — hoje aparecem como "Contato
+  Vendas" no catálogo, e chamá-los sem esse acesso responde "does not exist
+  or you do not have access to it". Se o assistente passar a responder
+  **502 "falha ao falar com o provedor de IA"**, a mensagem já traz o motivo
+  devolvido pela Groq — confira o catálogo atual com preço aberto em
   console.groq.com/docs/models e ajuste `GROQ_MODEL`.
 - `server/services/whatsapp.js` gerencia uma sessão Baileys por empresa. As
   credenciais (`creds` + chaves de sessão) ficam no MongoDB
