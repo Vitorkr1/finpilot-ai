@@ -12,6 +12,7 @@ import { StockPage } from './pages/StockPage'
 import { FinancialPage } from './pages/FinancialPage'
 import { AiAssistantPage } from './pages/AiAssistantPage'
 import { WhatsAppSettingsPage } from './pages/WhatsAppSettingsPage'
+import { CompanyUsersPage } from './pages/CompanyUsersPage'
 import { SuperAdminApp } from './pages/SuperAdminApp'
 import { SUPER_ADMIN_PATH } from './lib/superAdminPath'
 
@@ -112,6 +113,14 @@ function TenantRoutes() {
           element={
             <ProtectedRoute>
               <WhatsAppSettingsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/usuarios"
+          element={
+            <ProtectedRoute>
+              <CompanyUsersPage />
             </ProtectedRoute>
           }
         />
