@@ -69,6 +69,16 @@ npm run admin -- delete --company <id>
 `create-company` também cria o primeiro usuário `admin` da empresa e imprime uma
 senha temporária no terminal — repasse com segurança e peça a troca no primeiro login.
 
+### Painel secreto (opcional, além da CLI)
+
+Além da CLI, existe uma tela web para as mesmas ações: `/painel-criatech-k4m9vz`
+(constante `SUPER_ADMIN_PATH` em `client/src/App.tsx`). Não está linkada em
+nenhum menu do tenant e tem **login próprio**, separado do login das empresas
+(`SuperAdminAuthContext`) — mesmo assim, troque esse caminho antes de um deploy
+de produção real, já que uma URL escondida sozinha não é segurança. A API por
+trás (`/api/companies/*`) já valida `role: 'super_admin'` em toda rota,
+independentemente do caminho usado para chegar até ela.
+
 ## Configurando o MongoDB Atlas (free)
 
 1. Crie uma conta em [mongodb.com/cloud/atlas](https://www.mongodb.com/cloud/atlas).
@@ -150,6 +160,16 @@ e filtram automaticamente por `companyId`:
 - `POST /api/whatsapp/connect`, `GET /api/whatsapp/status`, `POST
   /api/whatsapp/disconnect` (Pro, restrito a `admin`)
 
+As rotas abaixo são exclusivas do super admin (`role: 'super_admin'`, sem
+`companyId`), usadas pela CLI e pelo painel secreto:
+
+- `GET /api/companies`, `GET /api/companies/:id`
+- `POST /api/companies` (cria a empresa + primeiro usuário admin)
+- `PATCH /api/companies/:id` (edita nome/cnpj/segmento/preço)
+- `PATCH /api/companies/:id/plan`, `PATCH /api/companies/:id/mark-paid`, `PATCH
+  /api/companies/:id/suspend`
+- `DELETE /api/companies/:id` (exige `{ confirm: true }` no corpo)
+
 ## WhatsApp e IA (fase 5)
 
 - `server/services/ai.js` isola toda chamada à Groq (SDK compatível com OpenAI,
@@ -174,9 +194,9 @@ e filtram automaticamente por `companyId`:
 1. ✅ **Fundação** — monorepo, MongoDB, `Company`/`User`, auth JWT, seed do super
    admin, CLI de admin, shell de login/dashboard no frontend.
 2. ✅ **Núcleo operacional** — Clientes, Orçamentos (com conversão em OS), Ordens
-   de Serviço (checklist, fotos/assinatura como campos prontos para o Cloudinary
-   da fase 5), Agenda por técnico/dia, gestão de usuários da empresa com limite
-   Basic/Pro já validado na API.
+   de Serviço (checklist, upload de fotos/assinatura direto para o Cloudinary),
+   Agenda por técnico/dia, gestão de usuários da empresa com limite Basic/Pro
+   já validado na API.
 3. ✅ **Estoque e Financeiro** — estoque Pro com baixa automática na OS,
    financeiro essencial (contas a pagar/receber) disponível em todos os planos.
 4. ✅ **Dashboard e relatórios** — indicadores básicos com gráfico, histórico de
@@ -184,4 +204,27 @@ e filtram automaticamente por `companyId`:
 5. ✅ **WhatsApp (Baileys) + assistente de IA** — chat de IA no dashboard,
    orçamento assistido por IA, conexão WhatsApp por QR code com triagem
    automática das mensagens recebidas.
-6. ⏳ Polimento do frontend, página secreta de admin, preparação final para deploy.
+6. ✅ **Polimento e preparação para deploy** — API completa de gestão de
+   empresas (super admin), painel secreto web além da CLI, rodapé em todas as
+   páginas (inclusive no painel admin), README com passo a passo de deploy.
+
+## Checklist antes de considerar pronto
+
+- [x] Login e isolamento por `companyId` — toda query operacional filtra por
+  `req.user.companyId`; testado via schema/middleware, recomenda-se validar
+  também com duas empresas reais no MongoDB Atlas antes de ir a produção.
+- [x] Feature gating Basic/Pro bloqueando na API (`requirePlan`), não só
+  escondendo botão — estoque, checklist dinâmico, IA e WhatsApp.
+- [x] Senha nunca aparece em log nem em resposta de API (`User.toJSON` remove
+  `passwordHash`; senhas temporárias só retornam uma vez, na criação).
+- [x] Upload de foto de OS sobrevive a um redeploy — `POST
+  /api/service-orders/:id/photos` e `.../signature` (`multer` em memória +
+  `server/services/cloudinary.js`) enviam o arquivo direto para o Cloudinary,
+  nunca gravam no disco local. Confirme na prática assim que
+  `CLOUDINARY_*` estiver configurado num ambiente real: suba uma foto, faça um
+  redeploy e verifique se a URL continua funcionando.
+- [x] CLI de admin cria empresa, muda plano, marca pago, suspende e exclui,
+  com confirmação antes de excluir.
+- [x] Rodapé com "Powered by CriaTech" (link) e WhatsApp de suporte em todas
+  as páginas, incluindo o painel secreto.
+- [x] README permite a qualquer pessoa clonar e rodar do zero.
