@@ -109,6 +109,18 @@ HTTP, **desligado por padrão**:
    já existir — não dá para reaproveitar o token nem criar um segundo super
    admin por essa via.
 
+**Esqueceu ou trocou a senha do super admin?** Existe uma rota irmã só para
+isso, com a mesma proteção por `SETUP_TOKEN`:
+```bash
+curl -X POST https://<sua-url>.onrender.com/api/setup/reset-super-admin-password \
+  -H "x-setup-token: <o valor de SETUP_TOKEN>"
+```
+Ela nunca aceita uma senha vinda da requisição — só resincroniza a conta que já
+existe (identificada por `SUPER_ADMIN_EMAIL`) com o valor atual de
+`SUPER_ADMIN_PASSWORD` no ambiente. Use quando `SUPER_ADMIN_PASSWORD` foi
+alterado no Render depois que a conta já tinha sido criada (a senha salva no
+banco não muda sozinha só porque a variável mudou).
+
 ## Configurando o MongoDB Atlas (free)
 
 1. Crie uma conta em [mongodb.com/cloud/atlas](https://www.mongodb.com/cloud/atlas).
