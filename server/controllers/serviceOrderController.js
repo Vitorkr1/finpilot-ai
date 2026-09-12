@@ -4,6 +4,7 @@ const Client = require('../models/Client');
 const User = require('../models/User');
 const StockItem = require('../models/StockItem');
 const { getTemplate, getDefaultChecklist } = require('../services/checklistTemplates');
+const cloudinary = require('../services/cloudinary');
 const asyncHandler = require('../utils/asyncHandler');
 const { logAction } = require('../services/audit');
 
@@ -122,4 +123,33 @@ const addMaterial = asyncHandler(async (req, res) => {
   res.status(201).json(order);
 });
 
-module.exports = { list, getOne, create, update, remove, checklistTemplate, addMaterial };
+// Fotos e assinatura da OS vão para o Cloudinary (Seção 3/11) — nunca para o
+// disco local, que some a cada reinício/deploy no Render free.
+const addPhoto = asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Envie um arquivo de imagem no campo "photo"' });
+
+  const order = await ServiceOrder.findOne({ _id: req.params.id, companyId: req.user.companyId });
+  if (!order) return res.status(404).json({ error: 'Ordem de serviço não encontrada' });
+
+  const url = await cloudinary.uploadBuffer(req.file.buffer, `criaos/${req.user.companyId}/service-orders`);
+  order.photos.push(url);
+  await order.save();
+
+  await logAction({ companyId: req.user.companyId, userId: req.user._id, action: 'add-photo', entity: 'ServiceOrder', entityId: order._id });
+  res.status(201).json(order);
+});
+
+const setSignature = asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Envie um arquivo de imagem no campo "signature"' });
+
+  const order = await ServiceOrder.findOne({ _id: req.params.id, companyId: req.user.companyId });
+  if (!order) return res.status(404).json({ error: 'Ordem de serviço não encontrada' });
+
+  order.signatureUrl = await cloudinary.uploadBuffer(req.file.buffer, `criaos/${req.user.companyId}/signatures`);
+  await order.save();
+
+  await logAction({ companyId: req.user.companyId, userId: req.user._id, action: 'set-signature', entity: 'ServiceOrder', entityId: order._id });
+  res.status(201).json(order);
+});
+
+module.exports = { list, getOne, create, update, remove, checklistTemplate, addMaterial, addPhoto, setSignature };
