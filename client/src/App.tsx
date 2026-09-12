@@ -13,10 +13,7 @@ import { FinancialPage } from './pages/FinancialPage'
 import { AiAssistantPage } from './pages/AiAssistantPage'
 import { WhatsAppSettingsPage } from './pages/WhatsAppSettingsPage'
 import { SuperAdminApp } from './pages/SuperAdminApp'
-
-// Caminho não linkado em nenhum menu (Seção 6) — não altere sem avisar quem
-// administra as empresas piloto.
-const SUPER_ADMIN_PATH = '/painel-criatech-k4m9vz'
+import { SUPER_ADMIN_PATH } from './lib/superAdminPath'
 
 export default function App() {
   return (

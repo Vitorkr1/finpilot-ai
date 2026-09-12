@@ -128,7 +128,9 @@ HTTP, **desligado por padrão**:
 1. Crie um **Web Service** apontando para este repositório.
 2. **Build Command:** `npm install && npm run build:client`
 3. **Start Command:** `npm start`
-4. Configure todas as variáveis de `.env.example` em *Environment*.
+4. Configure todas as variáveis de `.env.example` em *Environment*, incluindo
+   `TRUST_PROXY=1` (o Render fica atrás de um proxy reverso — sem isso,
+   `express-rate-limit` não consegue distinguir os IPs reais dos clientes).
 5. O serviço free "dorme" após ~15 min sem tráfego (leva 30-60s para acordar na
    próxima requisição). Isso afeta a sessão do WhatsApp (Baileys), que depende de
    conexão constante — implementamos reconexão automática, mas um serviço externo
