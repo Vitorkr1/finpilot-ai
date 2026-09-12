@@ -15,6 +15,8 @@ const companyUserRoutes = require('./routes/companyUserRoutes');
 const stockRoutes = require('./routes/stockRoutes');
 const financialRoutes = require('./routes/financialRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
+const aiRoutes = require('./routes/aiRoutes');
+const whatsappRoutes = require('./routes/whatsappRoutes');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 
 function createApp() {
@@ -44,6 +46,8 @@ function createApp() {
   app.use('/api/stock-items', stockRoutes);
   app.use('/api/financial-entries', financialRoutes);
   app.use('/api/dashboard', dashboardRoutes);
+  app.use('/api/ai', aiRoutes);
+  app.use('/api/whatsapp', whatsappRoutes);
 
   const clientDist = path.join(__dirname, '..', 'client', 'dist');
   app.use(express.static(clientDist));
