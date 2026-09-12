@@ -1,8 +1,9 @@
 const Company = require('../models/Company');
+const asyncHandler = require('../utils/asyncHandler');
 
 // Carrega a empresa do usuário autenticado e a expõe em req.company,
 // para checagem de plano (requirePlan) e escopo de dados por companyId.
-async function loadCompany(req, res, next) {
+const loadCompany = asyncHandler(async (req, res, next) => {
   if (!req.user || !req.user.companyId) {
     return next();
   }
@@ -17,6 +18,6 @@ async function loadCompany(req, res, next) {
 
   req.company = company;
   next();
-}
+});
 
 module.exports = loadCompany;
