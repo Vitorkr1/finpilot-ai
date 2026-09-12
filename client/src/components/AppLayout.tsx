@@ -47,6 +47,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   {item.label}
                 </NavLink>
               ))}
+            {user?.role === 'admin' && (
+              <NavLink to="/usuarios" className={navClass}>
+                Usuários
+              </NavLink>
+            )}
           </nav>
           <div className="flex items-center gap-3">
             <span className="text-sm text-slate-600">{user?.name}</span>
