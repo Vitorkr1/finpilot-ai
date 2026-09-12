@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { api, setAccessToken } from '../lib/api'
+import { api, setAccessToken, setRefreshEndpoint } from '../lib/api'
 import type { Company, User } from '../lib/types'
 
 interface AuthContextValue {
@@ -18,6 +18,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    setRefreshEndpoint('/auth/refresh')
     ;(async () => {
       try {
         const { data } = await api.post('/auth/refresh')
@@ -34,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   async function login(email: string, password: string) {
+    setRefreshEndpoint('/auth/refresh')
     const { data } = await api.post('/auth/login', { email, password })
     setAccessToken(data.accessToken)
     setUser(data.user)

@@ -6,9 +6,17 @@ export const api = axios.create({
 })
 
 let accessToken: string | null = null
+// Qual rota de refresh usar quando o token expira no meio de uma sessão —
+// tenant e super admin têm cookies e endpoints de refresh separados
+// (Seção 6: sessões completamente independentes).
+let refreshEndpoint: '/auth/refresh' | '/auth/admin-refresh' = '/auth/refresh'
 
 export function setAccessToken(token: string | null) {
   accessToken = token
+}
+
+export function setRefreshEndpoint(endpoint: '/auth/refresh' | '/auth/admin-refresh') {
+  refreshEndpoint = endpoint
 }
 
 api.interceptors.request.use((config) => {
@@ -22,7 +30,7 @@ let refreshPromise: Promise<string | null> | null = null
 
 async function refreshAccessToken(): Promise<string | null> {
   try {
-    const { data } = await api.post('/auth/refresh')
+    const { data } = await api.post(refreshEndpoint)
     setAccessToken(data.accessToken)
     return data.accessToken as string
   } catch {
@@ -35,12 +43,7 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const original = error.config
-    if (
-      error.response?.status === 401 &&
-      !original._retry &&
-      original.url !== '/auth/login' &&
-      original.url !== '/auth/refresh'
-    ) {
+    if (error.response?.status === 401 && !original._retry && !original.url?.startsWith('/auth/')) {
       original._retry = true
       refreshPromise ||= refreshAccessToken()
       const token = await refreshPromise
