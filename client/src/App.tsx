@@ -10,6 +10,8 @@ import { ServiceOrdersPage } from './pages/ServiceOrdersPage'
 import { AgendaPage } from './pages/AgendaPage'
 import { StockPage } from './pages/StockPage'
 import { FinancialPage } from './pages/FinancialPage'
+import { AiAssistantPage } from './pages/AiAssistantPage'
+import { WhatsAppSettingsPage } from './pages/WhatsAppSettingsPage'
 
 export default function App() {
   return (
@@ -77,6 +79,22 @@ export default function App() {
           element={
             <ProtectedRoute>
               <FinancialPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/assistente-ia"
+          element={
+            <ProtectedRoute>
+              <AiAssistantPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/configuracoes/whatsapp"
+          element={
+            <ProtectedRoute>
+              <WhatsAppSettingsPage />
             </ProtectedRoute>
           }
         />

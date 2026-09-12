@@ -12,7 +12,11 @@ const NAV_ITEMS = [
   { to: '/financeiro', label: 'Financeiro' },
 ]
 
-const PRO_NAV_ITEMS = [{ to: '/estoque', label: 'Estoque' }]
+const PRO_NAV_ITEMS = [
+  { to: '/estoque', label: 'Estoque' },
+  { to: '/assistente-ia', label: 'Assistente IA' },
+  { to: '/configuracoes/whatsapp', label: 'WhatsApp' },
+]
 
 function navClass({ isActive }: { isActive: boolean }) {
   return `rounded-lg px-3 py-1.5 text-sm font-medium ${

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { AppLayout } from '../components/AppLayout'
 import { api } from '../lib/api'
+import { useAuth } from '../context/AuthContext'
 import type { Budget, BudgetItem, Client, BudgetStatus } from '../lib/types'
 
 const STATUS_LABEL: Record<BudgetStatus, string> = {
@@ -13,6 +14,7 @@ const STATUS_LABEL: Record<BudgetStatus, string> = {
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 
 export function BudgetsPage() {
+  const { company } = useAuth()
   const [budgets, setBudgets] = useState<Budget[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
@@ -20,6 +22,8 @@ export function BudgetsPage() {
   const [clientId, setClientId] = useState('')
   const [items, setItems] = useState<BudgetItem[]>([{ description: '', qty: 1, unitPrice: 0 }])
   const [submitting, setSubmitting] = useState(false)
+  const [aiDescription, setAiDescription] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
 
   async function loadData() {
     setLoading(true)
@@ -84,11 +88,47 @@ export function BudgetsPage() {
     setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
 
+  async function generateAiDraft() {
+    if (!aiDescription.trim()) return
+    setAiLoading(true)
+    setError(null)
+    try {
+      const { data } = await api.post<{ items: BudgetItem[] }>('/ai/budget-draft', { description: aiDescription })
+      if (data.items.length > 0) setItems(data.items)
+    } catch {
+      setError('Não foi possível gerar o rascunho com IA agora.')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
   const total = items.reduce((sum, it) => sum + it.qty * it.unitPrice, 0)
 
   return (
     <AppLayout>
       <h2 className="mb-4 text-xl font-semibold text-slate-900">Orçamentos</h2>
+
+      {company?.plan === 'pro' && (
+        <div className="mb-4 rounded-xl border border-dashed border-brand-300 bg-brand-50 p-4">
+          <p className="mb-2 text-sm font-medium text-brand-700">Rascunho de orçamento com IA</p>
+          <div className="flex flex-wrap gap-2">
+            <input
+              value={aiDescription}
+              onChange={(e) => setAiDescription(e.target.value)}
+              placeholder="Ex.: instalação de 4 câmeras e 1 DVR com cabeamento"
+              className="min-w-[16rem] flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+            <button
+              type="button"
+              onClick={generateAiDraft}
+              disabled={aiLoading}
+              className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+            >
+              {aiLoading ? 'Gerando...' : 'Gerar itens com IA'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="mb-8 space-y-3 rounded-xl border border-slate-200 bg-white p-4">
         <select
