@@ -35,7 +35,12 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const original = error.config
-    if (error.response?.status === 401 && !original._retry && original.url !== '/auth/login') {
+    if (
+      error.response?.status === 401 &&
+      !original._retry &&
+      original.url !== '/auth/login' &&
+      original.url !== '/auth/refresh'
+    ) {
       original._retry = true
       refreshPromise ||= refreshAccessToken()
       const token = await refreshPromise
