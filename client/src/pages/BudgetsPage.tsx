@@ -30,6 +30,8 @@ export function BudgetsPage() {
   const [submitting, setSubmitting] = useState(false)
   const [aiDescription, setAiDescription] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
+  const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null)
+  const [pdfError, setPdfError] = useState<string | null>(null)
 
   async function loadData() {
     setLoading(true)
@@ -93,12 +95,25 @@ export function BudgetsPage() {
   }
 
   async function downloadPdf(id: string) {
-    const { data } = await api.get(`/budgets/${id}/pdf`, {
-      responseType: 'blob',
-    })
-    const url = URL.createObjectURL(data as Blob)
-    window.open(url, '_blank')
-    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    if (downloadingPdf) return
+    setDownloadingPdf(id)
+    setPdfError(null)
+    try {
+      const { data } = await api.get<Blob>(`/budgets/${id}/pdf`, { responseType: 'blob' })
+      const url = URL.createObjectURL(data)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `orcamento-${id}.pdf`
+      document.body.appendChild(link)
+      try { link.click() } finally {
+        link.remove()
+        setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      }
+    } catch {
+      setPdfError('Não foi possível gerar o PDF. Tente novamente.')
+    } finally {
+      setDownloadingPdf(null)
+    }
   }
 
   async function generateAiDraft() {
@@ -262,6 +277,7 @@ export function BudgetsPage() {
           ))}
         </div>
       </div>
+      {pdfError && <p role="alert" className="mb-4 text-sm text-red-600">{pdfError}</p>}
       {loading ? (
         <p className="text-sm text-slate-500">Carregando...</p>
       ) : budgets.filter(
@@ -322,10 +338,11 @@ export function BudgetsPage() {
                       </span>
                     )}
                     <button
+                      disabled={downloadingPdf !== null}
                       onClick={() => downloadPdf(b._id)}
                       className="text-sm text-brand-600 hover:underline"
                     >
-                      Baixar PDF
+                      {downloadingPdf === b._id ? 'Gerando PDF...' : 'Baixar PDF'}
                     </button>
                   </div>
                 </div>
