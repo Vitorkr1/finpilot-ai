@@ -14,7 +14,11 @@ export function CompanyUsersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [createdInfo, setCreatedInfo] = useState<string | null>(null)
-  const [form, setForm] = useState({ name: '', email: '', role: 'tecnico' as Role })
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    role: 'tecnico' as Role,
+  })
   const [submitting, setSubmitting] = useState(false)
 
   async function loadUsers() {
@@ -40,13 +44,15 @@ export function CompanyUsersPage() {
     setCreatedInfo(null)
     try {
       const { data } = await api.post('/company-users', form)
-      setCreatedInfo(`Usuário criado: ${data.user.email} · senha temporária: ${data.tempPassword} (copie agora, só aparece uma vez)`)
+      setCreatedInfo(
+        `Usuário criado: ${data.user.email} · senha temporária: ${data.tempPassword} (copie agora, só aparece uma vez)`,
+      )
       setForm({ name: '', email: '', role: 'tecnico' })
       await loadUsers()
     } catch (err: unknown) {
       const message =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Não foi possível criar o usuário.'
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error || 'Não foi possível criar o usuário.'
       setError(message)
     } finally {
       setSubmitting(false)
@@ -54,34 +60,52 @@ export function CompanyUsersPage() {
   }
 
   async function toggleActive(userToToggle: User) {
-    await api.patch(`/company-users/${userToToggle._id}/active`, { active: !userToToggle.active })
+    await api.patch(`/company-users/${userToToggle._id}/active`, {
+      active: !userToToggle.active,
+    })
     await loadUsers()
   }
 
   return (
     <AppLayout>
-      <h2 className="mb-1 text-xl font-semibold text-slate-900">Usuários da empresa</h2>
+      <h2 className="mb-1 text-xl font-semibold text-slate-900">
+        Usuários da empresa
+      </h2>
+      <p className="page-description">
+        Conecte sua equipe e organize os acessos da sua empresa.
+      </p>
       <p className="mb-4 text-sm text-slate-500">
-        Crie técnicos (para aparecer na Agenda), financeiro e outros admins. Basic permite até 3
-        usuários ativos, Pro até 30.
+        Crie técnicos (para aparecer na Agenda), financeiro e outros admins.
+        Basic permite até 3 usuários ativos, Pro até 30.
       </p>
 
-      <form onSubmit={handleSubmit} className="mb-8 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-4">
-        <input
-          placeholder="Nome"
-          required
-          value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        />
-        <input
-          placeholder="E-mail"
-          type="email"
-          required
-          value={form.email}
-          onChange={(e) => setForm({ ...form, email: e.target.value })}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        />
+      <form
+        onSubmit={handleSubmit}
+        className="mb-8 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-4"
+      >
+        <label className="form-field">
+          <span>Nome</span>
+          <input
+            aria-label="Nome"
+            placeholder="Nome"
+            required
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
+        </label>
+        <label className="form-field">
+          <span>E-mail</span>
+          <input
+            aria-label="E-mail"
+            placeholder="E-mail"
+            type="email"
+            required
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
+        </label>
         <select
           value={form.role}
           onChange={(e) => setForm({ ...form, role: e.target.value as Role })}
@@ -98,7 +122,9 @@ export function CompanyUsersPage() {
         >
           {submitting ? 'Criando...' : 'Adicionar usuário'}
         </button>
-        {createdInfo && <p className="sm:col-span-4 text-sm text-green-700">{createdInfo}</p>}
+        {createdInfo && (
+          <p className="sm:col-span-4 text-sm text-green-700">{createdInfo}</p>
+        )}
         {error && <p className="sm:col-span-4 text-sm text-red-600">{error}</p>}
       </form>
 
@@ -121,16 +147,25 @@ export function CompanyUsersPage() {
             <tbody>
               {users.map((u) => (
                 <tr key={u._id} className="border-t border-slate-100">
-                  <td className="px-4 py-2 font-medium text-slate-900">{u.name}</td>
+                  <td className="px-4 py-2 font-medium text-slate-900">
+                    {u.name}
+                  </td>
                   <td className="px-4 py-2 text-slate-600">{u.email}</td>
-                  <td className="px-4 py-2 text-slate-600">{ROLE_LABEL[u.role] || u.role}</td>
+                  <td className="px-4 py-2 text-slate-600">
+                    {ROLE_LABEL[u.role] || u.role}
+                  </td>
                   <td className="px-4 py-2">
-                    <span className={`text-xs font-medium ${u.active ? 'text-green-700' : 'text-slate-400'}`}>
+                    <span
+                      className={`text-xs font-medium ${u.active ? 'text-green-700' : 'text-slate-400'}`}
+                    >
                       {u.active ? 'Ativo' : 'Inativo'}
                     </span>
                   </td>
                   <td className="px-4 py-2 text-right">
-                    <button onClick={() => toggleActive(u)} className="text-brand-600 hover:underline">
+                    <button
+                      onClick={() => toggleActive(u)}
+                      className="text-brand-600 hover:underline"
+                    >
                       {u.active ? 'Desativar' : 'Ativar'}
                     </button>
                   </td>

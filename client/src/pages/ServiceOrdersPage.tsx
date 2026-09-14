@@ -20,6 +20,7 @@ const STATUS_LABEL: Record<ServiceOrderStatus, string> = {
 }
 
 export function ServiceOrdersPage() {
+  const [statusFilter, setStatusFilter] = useState('todos')
   const [orders, setOrders] = useState<ServiceOrder[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
@@ -31,7 +32,10 @@ export function ServiceOrdersPage() {
   async function loadData() {
     setLoading(true)
     try {
-      const [ordersRes, clientsRes] = await Promise.all([api.get<ServiceOrder[]>('/service-orders'), api.get<Client[]>('/clients')])
+      const [ordersRes, clientsRes] = await Promise.all([
+        api.get<ServiceOrder[]>('/service-orders'),
+        api.get<Client[]>('/clients'),
+      ])
       setOrders(ordersRes.data)
       setClients(clientsRes.data)
       if (!clientId && clientsRes.data[0]) setClientId(clientsRes.data[0]._id)
@@ -67,7 +71,9 @@ export function ServiceOrdersPage() {
   }
 
   async function toggleChecklistItem(order: ServiceOrder, index: number) {
-    const checklist = order.checklist.map((it, i) => (i === index ? { ...it, done: !it.done } : it))
+    const checklist = order.checklist.map((it, i) =>
+      i === index ? { ...it, done: !it.done } : it,
+    )
     await api.patch(`/service-orders/${order._id}`, { checklist })
     await loadData()
   }
@@ -82,7 +88,9 @@ export function ServiceOrdersPage() {
       })
       await loadData()
     } catch {
-      setError('Não foi possível enviar a foto. Verifique se o Cloudinary está configurado.')
+      setError(
+        'Não foi possível enviar a foto. Verifique se o Cloudinary está configurado.',
+      )
     }
   }
 
@@ -92,9 +100,17 @@ export function ServiceOrdersPage() {
 
   return (
     <AppLayout>
-      <h2 className="mb-4 text-xl font-semibold text-slate-900">Ordens de Serviço</h2>
+      <h2 className="mb-4 text-xl font-semibold text-slate-900">
+        Ordens de Serviço
+      </h2>
+      <p className="page-description">
+        Organize a execução, acompanhe os checklists e registre cada entrega.
+      </p>
 
-      <form onSubmit={handleSubmit} className="mb-8 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3">
+      <form
+        onSubmit={handleSubmit}
+        className="mb-8 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3"
+      >
         <select
           required
           value={clientId}
@@ -131,69 +147,120 @@ export function ServiceOrdersPage() {
         {error && <p className="sm:col-span-3 text-sm text-red-600">{error}</p>}
       </form>
 
+      <div className="list-toolbar">
+        <div className="filter-tabs" aria-label="Filtrar por status">
+          <button
+            aria-pressed={statusFilter === 'todos'}
+            onClick={() => setStatusFilter('todos')}
+          >
+            Todos ({orders.length})
+          </button>
+          {Object.entries(STATUS_LABEL).map(([value, label]) => (
+            <button
+              key={value}
+              aria-pressed={statusFilter === value}
+              onClick={() => setStatusFilter(value)}
+            >
+              {label} ({orders.filter((item) => item.status === value).length})
+            </button>
+          ))}
+        </div>
+      </div>
       {loading ? (
         <p className="text-sm text-slate-500">Carregando...</p>
-      ) : orders.length === 0 ? (
-        <p className="text-sm text-slate-500">Nenhuma ordem de serviço ainda.</p>
+      ) : orders.filter(
+          (item) => statusFilter === 'todos' || item.status === statusFilter,
+        ).length === 0 ? (
+        <p className="text-sm text-slate-500">
+          Nenhuma ordem de serviço neste status.
+        </p>
       ) : (
         <div className="space-y-3">
-          {orders.map((order) => (
-            <div key={order._id} className="rounded-xl border border-slate-200 bg-white p-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="font-medium text-slate-900">{clientName(order.clientId)}</p>
-                  <p className="text-xs text-slate-500">
-                    {SEGMENTS.find((s) => s.value === order.segment)?.label} · {order.laborHours}h registradas
-                  </p>
+          {orders
+            .filter(
+              (item) =>
+                statusFilter === 'todos' || item.status === statusFilter,
+            )
+            .map((order) => (
+              <div
+                key={order._id}
+                className="rounded-xl border border-slate-200 bg-white p-4"
+              >
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="font-medium text-slate-900">
+                      {clientName(order.clientId)}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {SEGMENTS.find((s) => s.value === order.segment)?.label} ·{' '}
+                      {order.laborHours}h registradas
+                    </p>
+                  </div>
+                  <select
+                    value={order.status}
+                    onChange={(e) =>
+                      updateStatus(
+                        order._id,
+                        e.target.value as ServiceOrderStatus,
+                      )
+                    }
+                    className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                  >
+                    {Object.entries(STATUS_LABEL).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <select
-                  value={order.status}
-                  onChange={(e) => updateStatus(order._id, e.target.value as ServiceOrderStatus)}
-                  className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
-                >
-                  {Object.entries(STATUS_LABEL).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
+                <ul className="mb-3 space-y-1">
+                  {order.checklist.map((item, index) => (
+                    <li key={index} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={item.done}
+                        onChange={() => toggleChecklistItem(order, index)}
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                      <span
+                        className={
+                          item.done
+                            ? 'text-slate-400 line-through'
+                            : 'text-slate-700'
+                        }
+                      >
+                        {item.item}
+                      </span>
+                    </li>
                   ))}
-                </select>
-              </div>
-              <ul className="mb-3 space-y-1">
-                {order.checklist.map((item, index) => (
-                  <li key={index} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={item.done}
-                      onChange={() => toggleChecklistItem(order, index)}
-                      className="h-4 w-4 rounded border-slate-300"
-                    />
-                    <span className={item.done ? 'text-slate-400 line-through' : 'text-slate-700'}>{item.item}</span>
-                  </li>
-                ))}
-              </ul>
+                </ul>
 
-              <div className="flex flex-wrap items-center gap-2">
-                {order.photos.map((url, i) => (
-                  <a key={i} href={url} target="_blank" rel="noreferrer">
-                    <img src={url} alt="Foto da OS" className="h-14 w-14 rounded-lg object-cover" />
-                  </a>
-                ))}
-                <label className="cursor-pointer rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-500 hover:bg-slate-50">
-                  + Foto
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      if (file) uploadPhoto(order._id, file)
-                      e.target.value = ''
-                    }}
-                  />
-                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  {order.photos.map((url, i) => (
+                    <a key={i} href={url} target="_blank" rel="noreferrer">
+                      <img
+                        src={url}
+                        alt="Foto da OS"
+                        className="h-14 w-14 rounded-lg object-cover"
+                      />
+                    </a>
+                  ))}
+                  <label className="cursor-pointer rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-500 hover:bg-slate-50">
+                    + Foto
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) uploadPhoto(order._id, file)
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
         </div>
       )}
     </AppLayout>
