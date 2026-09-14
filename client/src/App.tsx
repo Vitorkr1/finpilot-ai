@@ -1,41 +1,106 @@
-import { Routes, Route } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
+import { Routes, Route, Link } from 'react-router-dom'
+import { AppLayout } from './components/AppLayout'
 import { AuthProvider } from './context/AuthContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
-import { LoginPage } from './pages/LoginPage'
-import { DashboardPage } from './pages/DashboardPage'
-import { ClientsPage } from './pages/ClientsPage'
-import { ClientHistoryPage } from './pages/ClientHistoryPage'
-import { BudgetsPage } from './pages/BudgetsPage'
-import { ServiceOrdersPage } from './pages/ServiceOrdersPage'
-import { AgendaPage } from './pages/AgendaPage'
-import { StockPage } from './pages/StockPage'
-import { FinancialPage } from './pages/FinancialPage'
-import { AiAssistantPage } from './pages/AiAssistantPage'
-import { WhatsAppSettingsPage } from './pages/WhatsAppSettingsPage'
-import { CompanyUsersPage } from './pages/CompanyUsersPage'
-import { SuperAdminApp } from './pages/SuperAdminApp'
+const LoginPage = lazy(() =>
+  import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })),
+)
+const DashboardPage = lazy(() =>
+  import('./pages/DashboardPage').then((module) => ({
+    default: module.DashboardPage,
+  })),
+)
+const ClientsPage = lazy(() =>
+  import('./pages/ClientsPage').then((module) => ({
+    default: module.ClientsPage,
+  })),
+)
+const ClientHistoryPage = lazy(() =>
+  import('./pages/ClientHistoryPage').then((module) => ({
+    default: module.ClientHistoryPage,
+  })),
+)
+const BudgetsPage = lazy(() =>
+  import('./pages/BudgetsPage').then((module) => ({
+    default: module.BudgetsPage,
+  })),
+)
+const ServiceOrdersPage = lazy(() =>
+  import('./pages/ServiceOrdersPage').then((module) => ({
+    default: module.ServiceOrdersPage,
+  })),
+)
+const AgendaPage = lazy(() =>
+  import('./pages/AgendaPage').then((module) => ({
+    default: module.AgendaPage,
+  })),
+)
+const StockPage = lazy(() =>
+  import('./pages/StockPage').then((module) => ({ default: module.StockPage })),
+)
+const FinancialPage = lazy(() =>
+  import('./pages/FinancialPage').then((module) => ({
+    default: module.FinancialPage,
+  })),
+)
+const AiAssistantPage = lazy(() =>
+  import('./pages/AiAssistantPage').then((module) => ({
+    default: module.AiAssistantPage,
+  })),
+)
+const WhatsAppSettingsPage = lazy(() =>
+  import('./pages/WhatsAppSettingsPage').then((module) => ({
+    default: module.WhatsAppSettingsPage,
+  })),
+)
+const CompanyUsersPage = lazy(() =>
+  import('./pages/CompanyUsersPage').then((module) => ({
+    default: module.CompanyUsersPage,
+  })),
+)
+const SuperAdminApp = lazy(() =>
+  import('./pages/SuperAdminApp').then((module) => ({
+    default: module.SuperAdminApp,
+  })),
+)
 import { SUPER_ADMIN_PATH } from './lib/superAdminPath'
 
 export default function App() {
   return (
-    <Routes>
-      <Route path={`${SUPER_ADMIN_PATH}/*`} element={<SuperAdminApp />} />
-      <Route
-        path="*"
-        element={
-          <AuthProvider>
-            <TenantRoutes />
-          </AuthProvider>
-        }
-      />
-    </Routes>
+    <Suspense
+      fallback={
+        <div className="route-loading" role="status">
+          Carregando workspace...
+        </div>
+      }
+    >
+      <Routes>
+        <Route path={`${SUPER_ADMIN_PATH}/*`} element={<SuperAdminApp />} />
+        <Route
+          path="*"
+          element={
+            <AuthProvider>
+              <TenantRoutes />
+            </AuthProvider>
+          }
+        />
+      </Routes>
+    </Suspense>
   )
 }
 
 function TenantRoutes() {
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
+    <Suspense
+      fallback={
+        <div className="route-loading" role="status">
+          Carregando módulo...
+        </div>
+      }
+    >
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
         <Route
           path="/"
           element={
@@ -124,6 +189,25 @@ function TenantRoutes() {
             </ProtectedRoute>
           }
         />
-    </Routes>
+        <Route
+          path="*"
+          element={
+            <ProtectedRoute>
+              <AppLayout>
+                <div className="empty-state">
+                  <h2 className="text-2xl font-semibold">
+                    Página não encontrada
+                  </h2>
+                  <p>Este endereço não faz parte do seu workspace.</p>
+                  <Link to="/" className="primary-button">
+                    Voltar ao início
+                  </Link>
+                </div>
+              </AppLayout>
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </Suspense>
   )
 }

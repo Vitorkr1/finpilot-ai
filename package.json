@@ -14,7 +14,8 @@
     "build:client": "npm run build --workspace=client",
     "start": "npm run start --workspace=server",
     "admin": "npm run admin --workspace=server",
-    "seed:super-admin": "npm run seed:super-admin --workspace=server"
+    "seed:super-admin": "npm run seed:super-admin --workspace=server",
+    "test:client": "node --test client/tests/*.test.mjs"
   },
   "devDependencies": {
     "concurrently": "^10.0.5"

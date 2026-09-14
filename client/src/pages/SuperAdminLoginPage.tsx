@@ -27,16 +27,27 @@ export function SuperAdminLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-950 px-4">
+    <div className="admin-surface flex min-h-screen flex-col bg-slate-950 px-4">
       <div className="flex flex-1 items-center justify-center">
         <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-sm">
-          <h1 className="mb-1 text-lg font-semibold text-slate-100">CriaTech · Painel Admin</h1>
-          <p className="mb-6 text-sm text-slate-400">Acesso restrito à equipe CriaTech</p>
+          <h1 className="mb-1 text-lg font-semibold text-slate-100">
+            CriaTech · Painel Admin
+          </h1>
+          <p className="mb-6 text-sm text-slate-400">
+            Acesso restrito à equipe CriaTech
+          </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-300">E-mail</label>
+              <label
+                htmlFor="admin-email"
+                className="mb-1 block text-sm font-medium text-slate-300"
+              >
+                E-mail
+              </label>
               <input
+                id="admin-email"
+                autoComplete="username"
                 type="email"
                 required
                 value={email}
@@ -45,8 +56,12 @@ export function SuperAdminLoginPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-300">Senha</label>
+              <label className="mb-1 block text-sm font-medium text-slate-300">
+                Senha
+              </label>
               <input
+                id="admin-password"
+                autoComplete="current-password"
                 type="password"
                 required
                 value={password}

@@ -1,72 +1,169 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { Footer } from '../components/Footer'
-
+import { Icon } from '../components/Icon'
 export function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
     setSubmitting(true)
     try {
-      await login(email, password)
-      navigate('/')
+      await login(email.trim(), password)
+      navigate('/', { replace: true })
     } catch {
-      setError('E-mail ou senha inválidos.')
+      setError(
+        'Não foi possível entrar. Confira suas credenciais e sua conexão.',
+      )
     } finally {
       setSubmitting(false)
     }
   }
-
   return (
-    <div className="flex min-h-screen flex-col">
-      <div className="flex flex-1 items-center justify-center px-4">
-        <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-          <h1 className="mb-1 text-2xl font-semibold text-slate-900">CriaOS</h1>
-          <p className="mb-6 text-sm text-slate-500">Entre com sua conta para continuar</p>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="login-page">
+      <section className="login-story">
+        <a href="https://www.criatech.online" className="brand-lockup">
+          <span className="brand-mark">
+            <Icon name="spark" size={25} />
+          </span>
+          <span>
+            cria<span className="brand-os">OS</span>
+            <small>BY CRIA TECH</small>
+          </span>
+        </a>
+        <div className="login-story-content">
+          <span className="story-tag">
+            <span />
+            TECNOLOGIA QUE FAZ ACONTECER
+          </span>
+          <h1>
+            Sua operação.
+            <br />
+            Seu próximo
+            <br />
+            <em>grande passo.</em>
+          </h1>
+          <p>
+            O sistema que conecta sua equipe, organiza seus serviços e acompanha
+            o crescimento da sua empresa.
+          </p>
+          <div className="story-features">
+            <span>
+              <Icon name="check" size={16} />
+              Gestão em um só lugar
+            </span>
+            <span>
+              <Icon name="check" size={16} />
+              Mais tempo para crescer
+            </span>
+          </div>
+          <div className="story-card">
+            <span className="story-card-icon">
+              <Icon name="tool" size={23} />
+            </span>
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">E-mail</label>
+              <strong>Do orçamento à entrega.</strong>
+              <p>Cada etapa conectada. Cada detalhe sob controle.</p>
+            </div>
+            <Icon name="arrow" />
+          </div>
+        </div>
+        <p className="story-footer">
+          Feito por Cria Tech. Pensado para quem faz.
+        </p>
+      </section>
+      <section className="login-form-side">
+        <div className="login-form-wrap">
+          <span className="login-welcome">
+            <Icon name="shield" size={20} />
+          </span>
+          <p className="eyebrow">BEM-VINDO AO SEU WORKSPACE</p>
+          <h2>Bom ter você de volta.</h2>
+          <p className="login-description">
+            Entre na sua conta e continue de onde parou.
+          </p>
+          <form onSubmit={handleSubmit} className="login-form">
+            <div>
+              <label htmlFor="email">E-mail profissional</label>
               <input
+                id="email"
                 type="email"
+                autoComplete="username"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                placeholder="voce@suaempresa.com.br"
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Senha</label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              />
+              <label htmlFor="password">Senha</label>
+              <div className="password-field">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Digite sua senha"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-pressed={showPassword}
+                  aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                >
+                  {showPassword ? 'Ocultar' : 'Mostrar'}
+                </button>
+              </div>
             </div>
-
-            {error && <p className="text-sm text-red-600">{error}</p>}
-
+            {error && (
+              <p role="alert" className="login-error">
+                {error}
+              </p>
+            )}
             <button
               type="submit"
               disabled={submitting}
-              className="w-full rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60"
+              className="primary-button full-width"
             >
-              {submitting ? 'Entrando...' : 'Entrar'}
+              {submitting ? 'Entrando...' : 'Entrar no workspace'}
+              <Icon name="arrow" size={18} />
             </button>
           </form>
+          <p className="login-help">
+            Precisa de acesso ou esqueceu a senha?
+            <br />
+            <a
+              href="https://wa.me/5581996744143"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Fale com nosso suporte <Icon name="arrow" size={14} />
+            </a>
+          </p>
+          <div className="login-security">
+            <Icon name="shield" size={15} />
+            Acesso exclusivo para sua empresa
+          </div>
         </div>
-      </div>
-      <Footer />
+        <footer className="login-footer">
+          <span>© {new Date().getFullYear()} Cria Tech</span>
+          <a
+            href="https://www.criatech.online"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Conheça a Cria Tech ↗
+          </a>
+        </footer>
+      </section>
     </div>
   )
 }

@@ -21,7 +21,12 @@ export function SuperAdminDashboardPage() {
   const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [form, setForm] = useState({ name: '', email: '', cnpj: '', plan: 'basic' as Plan })
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    cnpj: '',
+    plan: 'basic' as Plan,
+  })
   const [submitting, setSubmitting] = useState(false)
   const [createdInfo, setCreatedInfo] = useState<string | null>(null)
 
@@ -48,7 +53,9 @@ export function SuperAdminDashboardPage() {
     setCreatedInfo(null)
     try {
       const { data } = await api.post('/companies', form)
-      setCreatedInfo(`Empresa criada. Login do admin: ${data.adminUser.email} · senha temporária: ${data.tempPassword}`)
+      setCreatedInfo(
+        `Empresa criada. Login do admin: ${data.adminUser.email} · senha temporária: ${data.tempPassword}`,
+      )
       setForm({ name: '', email: '', cnpj: '', plan: 'basic' })
       await loadCompanies()
     } catch {
@@ -64,8 +71,14 @@ export function SuperAdminDashboardPage() {
   }
 
   async function markPaid(id: string) {
-    const nextDueDate = window.prompt('Próximo vencimento (AAAA-MM-DD), opcional:')
-    await api.patch(`/companies/${id}/mark-paid`, nextDueDate ? { nextDueDate } : {})
+    const nextDueDate = window.prompt(
+      'Próximo vencimento (AAAA-MM-DD), opcional:',
+    )
+    if (nextDueDate === null) return
+    await api.patch(
+      `/companies/${id}/mark-paid`,
+      nextDueDate ? { nextDueDate } : {},
+    )
     await loadCompanies()
   }
 
@@ -83,46 +96,98 @@ export function SuperAdminDashboardPage() {
   }
 
   async function remove(id: string, name: string) {
-    if (!confirm(`Excluir "${name}" e todos os seus usuários? Esta ação não pode ser desfeita.`)) return
+    if (
+      !confirm(
+        `Excluir "${name}" e todos os seus usuários? Esta ação não pode ser desfeita.`,
+      )
+    )
+      return
     await api.delete(`/companies/${id}`, { data: { confirm: true } })
     await loadCompanies()
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-950 px-4 py-8 text-slate-100">
+    <div className="admin-surface flex min-h-screen flex-col bg-slate-950 px-4 py-8 text-slate-100">
       <div className="mx-auto w-full max-w-5xl flex-1">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-xl font-semibold">Painel CriaTech</h1>
           <div className="flex items-center gap-3 text-sm text-slate-400">
             <span>{user?.name}</span>
-            <button onClick={logout} className="rounded-lg border border-slate-700 px-3 py-1.5 hover:bg-slate-800">
+            <button
+              onClick={logout}
+              className="rounded-lg border border-slate-700 px-3 py-1.5 hover:bg-slate-800"
+            >
               Sair
             </button>
           </div>
         </div>
 
-        <form onSubmit={handleCreate} className="mb-8 grid gap-3 rounded-xl border border-slate-800 bg-slate-900 p-4 sm:grid-cols-5">
-          <input
-            placeholder="Nome da empresa"
-            required
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
-          />
-          <input
-            placeholder="E-mail do admin"
-            type="email"
-            required
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-            className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
-          />
-          <input
-            placeholder="CNPJ"
-            value={form.cnpj}
-            onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
-            className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
-          />
+        <p className="mb-6 text-sm text-slate-400">
+          Visão central das empresas, planos e assinaturas da Cria Tech.
+        </p>
+        {!loading && (
+          <div className="admin-metrics">
+            <div>
+              <span>Empresas cadastradas</span>
+              <strong>{companies.length}</strong>
+            </div>
+            <div>
+              <span>Assinaturas em dia</span>
+              <strong>
+                {
+                  companies.filter((c) => c.subscriptionStatus === 'active')
+                    .length
+                }
+              </strong>
+            </div>
+            <div>
+              <span>Pagamentos em atraso</span>
+              <strong>
+                {
+                  companies.filter((c) => c.subscriptionStatus === 'overdue')
+                    .length
+                }
+              </strong>
+            </div>
+          </div>
+        )}
+        <form
+          onSubmit={handleCreate}
+          className="mb-8 grid gap-3 rounded-xl border border-slate-800 bg-slate-900 p-4 sm:grid-cols-5"
+        >
+          <label className="form-field">
+            <span>Nome da empresa</span>
+            <input
+              aria-label="Nome da empresa"
+              placeholder="Nome da empresa"
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="form-field">
+            <span>E-mail do admin</span>
+            <input
+              aria-label="E-mail do admin"
+              placeholder="E-mail do admin"
+              type="email"
+              required
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="form-field">
+            <span>CNPJ</span>
+            <input
+              aria-label="CNPJ"
+              placeholder="CNPJ"
+              value={form.cnpj}
+              onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
+              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
+            />
+          </label>
           <select
             value={form.plan}
             onChange={(e) => setForm({ ...form, plan: e.target.value as Plan })}
@@ -138,8 +203,14 @@ export function SuperAdminDashboardPage() {
           >
             {submitting ? 'Criando...' : 'Criar empresa'}
           </button>
-          {createdInfo && <p className="sm:col-span-5 text-sm text-green-400">{createdInfo}</p>}
-          {error && <p className="sm:col-span-5 text-sm text-red-400">{error}</p>}
+          {createdInfo && (
+            <p className="sm:col-span-5 text-sm text-green-400">
+              {createdInfo}
+            </p>
+          )}
+          {error && (
+            <p className="sm:col-span-5 text-sm text-red-400">{error}</p>
+          )}
         </form>
 
         {loading ? (
@@ -171,24 +242,40 @@ export function SuperAdminDashboardPage() {
                       </select>
                     </td>
                     <td className="px-4 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[c.subscriptionStatus]}`}>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[c.subscriptionStatus]}`}
+                      >
                         {STATUS_LABEL[c.subscriptionStatus]}
                       </span>
                     </td>
                     <td className="px-4 py-2 text-slate-400">
-                      {c.nextDueDate ? new Date(c.nextDueDate).toLocaleDateString('pt-BR') : '-'}
+                      {c.nextDueDate
+                        ? new Date(c.nextDueDate).toLocaleDateString('pt-BR')
+                        : '-'}
                     </td>
                     <td className="space-x-3 px-4 py-2 text-right text-xs">
-                      <button onClick={() => editName(c)} className="text-slate-300 hover:underline">
+                      <button
+                        onClick={() => editName(c)}
+                        className="text-slate-300 hover:underline"
+                      >
                         Editar
                       </button>
-                      <button onClick={() => markPaid(c._id)} className="text-green-400 hover:underline">
+                      <button
+                        onClick={() => markPaid(c._id)}
+                        className="text-green-400 hover:underline"
+                      >
                         Marcar pago
                       </button>
-                      <button onClick={() => suspend(c._id)} className="text-amber-400 hover:underline">
+                      <button
+                        onClick={() => suspend(c._id)}
+                        className="text-amber-400 hover:underline"
+                      >
                         Suspender
                       </button>
-                      <button onClick={() => remove(c._id, c.name)} className="text-red-400 hover:underline">
+                      <button
+                        onClick={() => remove(c._id, c.name)}
+                        className="text-red-400 hover:underline"
+                      >
                         Excluir
                       </button>
                     </td>
