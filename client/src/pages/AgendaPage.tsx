@@ -43,15 +43,15 @@ export function AgendaPage() {
   }, [date])
 
   useEffect(() => {
-    if (user?.role !== 'admin') return
+    if (user?.role !== 'admin' && user?.role !== 'financeiro') return
     api
-      .get<User[]>('/company-users')
+      .get<User[]>('/company-users/technicians')
       .then(({ data }) => {
-        const techs = data.filter((u) => u.role === 'tecnico')
+        const techs = data
         setTechnicians(techs)
         if (techs[0]) setForm((f) => ({ ...f, technicianId: techs[0]._id }))
       })
-      .catch(() => {})
+      .catch(() => setError('Não foi possível carregar os técnicos.'))
   }, [user])
 
   async function handleSubmit(e: FormEvent) {
@@ -73,7 +73,7 @@ export function AgendaPage() {
   }
 
   function technicianName(id: string) {
-    return technicians.find((t) => t._id === id)?.name || 'Técnico'
+    return id === user?._id ? user.name : technicians.find((t) => t._id === id)?.name || 'Técnico'
   }
 
   return (
@@ -94,7 +94,7 @@ export function AgendaPage() {
         />
       </div>
 
-      {user?.role === 'admin' && (
+      {(user?.role === 'admin' || user?.role === 'financeiro') && (
         <form
           onSubmit={handleSubmit}
           className="mb-8 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-4"

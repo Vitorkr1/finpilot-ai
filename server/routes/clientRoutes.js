@@ -4,6 +4,8 @@ const loadCompany = require('../middleware/loadCompany');
 const { list, getOne, create, update, remove, history } = require('../controllers/clientController');
 
 const router = express.Router();
+router.param('id', require('../utils/validation').validateId);
+router.param('clientId', require('../utils/validation').validateId);
 
 router.use(requireAuth, requireTenant, loadCompany);
 router.get('/', list);

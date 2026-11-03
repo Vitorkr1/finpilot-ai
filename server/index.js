@@ -8,6 +8,7 @@ const PORT = process.env.PORT || 5000;
 async function start() {
   await connectDB();
   const app = createApp();
+  await Promise.all(Object.values(require('mongoose').models).map((model) => model.init()));
   startSubscriptionCron();
   app.listen(PORT, () => {
     console.log(`[server] CriaOS rodando na porta ${PORT}`);

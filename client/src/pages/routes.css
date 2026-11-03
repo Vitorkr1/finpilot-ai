@@ -1,0 +1,57 @@
+.routes-heading { margin-bottom: 26px; }
+.routes-panel { background: #fff; border: 1px solid #e1e6ed; border-radius: 12px; overflow: hidden; }
+.routes-summary { display: grid; grid-template-columns: repeat(3, minmax(110px, 1fr)) 1.3fr; border: 1px solid #e1e6ed; border-radius: 12px; background: white; margin-bottom: 24px; }
+.routes-summary > div { padding: 22px 25px; border-right: 1px solid #edf0f4; display: flex; flex-direction: column; gap: 8px; }
+.routes-summary span { font-size: 12px; color: #748196; }
+.routes-summary strong { color: #24324a; font-size: 30px; font-weight: 650; letter-spacing: -1px; }
+.routes-summary > p { display: flex; align-items: flex-start; gap: 12px; font-size: 12px; line-height: 1.7; color: #69768b; padding: 25px; }
+.routes-summary svg { flex-shrink: 0; margin-top: 2px; color: #687991; }
+.routes-empty { min-height: 340px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 36px; }
+.routes-empty-icon { width: 68px; height: 68px; background: #f0f3f7; border-radius: 50%; color: #78879d; display: grid; place-items: center; margin-bottom: 22px; }
+.routes-empty h3 { font-size: 19px; font-weight: 600; color: #2c3a50; }
+.routes-empty p { max-width: 410px; font-size: 13px; line-height: 1.8; margin-top: 10px; color: #718096; }
+.routes-empty > span:last-child { font-size: 11px; color: #8b96a6; margin-top: 22px; }
+.routes-workspace { display: grid; grid-template-columns: 310px minmax(0, 1fr); gap: 22px; align-items: start; }
+.routes-list-heading, .routes-map-heading { padding: 20px 22px; border-bottom: 1px solid #edf0f4; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.routes-list-heading h3, .routes-map-heading h3 { font-size: 13px; font-weight: 650; color: #334158; }
+.routes-list-heading > span { font-size: 11px; background: #f1f4f8; padding: 3px 8px; border-radius: 5px; }
+.routes-map-heading > span { font-size: 11px; color: #8792a3; }
+.route-person { padding: 22px; border-bottom: 1px solid #edf0f4; }
+.route-person:last-child { border-bottom: none; }
+.route-person.is-selected { background: #f5f7fd; }
+.route-person-name { display: flex; gap: 11px; align-items: center; margin-bottom: 15px; }
+.route-person-name > span { width: 36px; height: 36px; display: grid; place-items: center; background: #edf1f7; border-radius: 9px; color: #617188; font-size: 12px; font-weight: 600; }
+.route-person-name h4 { font-size: 13px; font-weight: 600; color: #29394f; overflow-wrap: anywhere; }
+.route-person-name p, .route-person-detail { font-size: 11px; color: #8490a2; margin-top: 4px; }
+.route-person-detail { margin-top: 10px; line-height: 1.6; }
+.route-status { display: inline-flex; align-items: center; gap: 6px; border-radius: 4px; padding: 5px 8px; font-size: 10px; font-weight: 550; }
+.route-status::before { content: ''; height: 5px; width: 5px; border-radius: 50%; background: currentColor; }
+.route-status.recent { color: #28765a; background: #edf6f1; }
+.route-status.waiting { color: #8b712b; background: #faf5e9; }
+.route-status.stale { color: #ad6626; background: #fff2e8; }
+.route-map-button { display: flex; gap: 8px; align-items: center; font-size: 11px; color: #4c61b8; margin-top: 15px; padding: 4px 0; }
+.route-map { height: 450px; width: 100%; background: #f0f3f5; z-index: 0; font-family: inherit; }
+.routes-map-note { font-size: 11px; line-height: 1.8; color: #7b8799; padding: 15px 22px; }
+.routes-caption { font-size: 11px; color: #7f8c9f; line-height: 1.9; }
+.routes-footnote { margin-top: 20px; max-width: 850px; }
+.routes-error { margin-bottom: 20px; padding: 12px 16px; background: #fff2ef; color: #a44d40; border-radius: 8px; font-size: 13px; }
+.routes-technician { display: grid; grid-template-columns: 1.2fr 1fr; gap: 22px; }
+.routes-technician > section { padding: 30px; }
+.routes-platform { display: block; font-size: 9px; font-weight: 650; letter-spacing: 1.8px; color: #698175; margin-bottom: 24px; }
+.routes-android h3 { font-size: 24px; letter-spacing: -.6px; line-height: 1.35; color: #2e3d51; max-width: 330px; }
+.routes-android > p:not(.routes-caption) { font-size: 13px; color: #738094; line-height: 1.9; margin-top: 16px; }
+.routes-android ol { list-style: decimal; padding-left: 18px; font-size: 12px; color: #526176; line-height: 2; margin: 25px 0; }
+.routes-android .routes-caption { margin-top: 20px; }
+.routes-section-title { display: flex; gap: 10px; align-items: center; color: #5c6d82; margin-bottom: 26px; }
+.routes-section-title h3 { font-size: 14px; font-weight: 600; color: #334158; }
+.routes-copy { font-size: 13px; line-height: 1.8; color: #69778a; margin-top: 18px; margin-bottom: 14px; }
+.routes-stop { display: inline-flex; background: #fff; border: 1px solid #e6d0cc; border-radius: 7px; padding: 11px 16px; color: #a54d40; font-size: 12px; font-weight: 600; margin-top: 22px; }
+.routes-stop:disabled, .routes-heading button:disabled { opacity: .5; cursor: wait; }
+.routes-stop-confirm p { font-size: 13px; color: #56647a; margin-top: 24px; }
+.routes-stop-confirm button { margin-right: 8px; }
+.routes-small-empty { padding: 20px 0; color: #829084; }
+.routes-small-empty h4 { margin: 16px 0 8px; font-weight: 600; font-size: 16px; color: #3c4a60; }
+.routes-small-empty p { font-size: 13px; color: #7b8799; line-height: 1.8; }
+.routes-install-note { padding: 12px 14px; border-left: 2px solid #cad6cd; background: #f6f8f6; }
+@media (max-width: 1100px) { .routes-summary { grid-template-columns: repeat(3, 1fr); } .routes-summary > p { grid-column: 1 / -1; border-top: 1px solid #edf0f4; padding: 16px 25px; } .routes-workspace { grid-template-columns: 270px minmax(0, 1fr); gap: 16px; } }
+@media (max-width: 760px) { .routes-heading { align-items: flex-start; } .routes-heading h2 { font-size: 25px; } .routes-summary > div { padding: 17px 14px; } .routes-summary span { font-size: 10px; } .routes-summary strong { font-size: 25px; } .routes-workspace, .routes-technician { grid-template-columns: 1fr; } .routes-list { max-height: 360px; overflow-y: auto; } .route-map { height: 350px; } .routes-technician > section { padding: 24px; } .routes-map-heading { flex-wrap: wrap; } }

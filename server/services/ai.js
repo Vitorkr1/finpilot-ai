@@ -2,6 +2,8 @@
 // Trocar de Groq/Llama para outro provedor (ex. Gemini) deve significar
 // mudar apenas este arquivo — nenhum controller conhece o SDK usado aqui.
 const OpenAI = require('openai');
+const { z } = require('zod');
+const v = require('../utils/validation');
 
 // Configurável porque provedores descontinuam/renomeiam modelos com o tempo —
 // se este endpoint passar a responder 502 "falha ao falar com a IA", confira
@@ -19,7 +21,7 @@ function getClient() {
     throw err;
   }
   if (!client) {
-    client = new OpenAI({ apiKey: process.env.GROQ_API_KEY, baseURL: 'https://api.groq.com/openai/v1' });
+    client = new OpenAI({ apiKey: process.env.GROQ_API_KEY, baseURL: 'https://api.groq.com/openai/v1', timeout: 45000, maxRetries: 1 });
   }
   return client;
 }
@@ -30,7 +32,7 @@ function getClient() {
 // inexistente. Sempre normalizamos para 502 com uma mensagem diagnosticável.
 async function chatCompletion(messages, options = {}) {
   try {
-    return await getClient().chat.completions.create({ model: MODEL, messages, ...options });
+    return await getClient().chat.completions.create({ model: MODEL, messages, max_tokens: 2000, ...options });
   } catch (err) {
     if (err.status === 503) throw err; // GROQ_API_KEY ausente — já é claro
     const upstreamMessage = err.error?.message || err.message || 'erro desconhecido';
@@ -63,8 +65,9 @@ async function draftBudgetItems(description) {
   );
 
   const items = extractJson(completion.choices[0].message.content);
-  if (!Array.isArray(items)) throw new Error('Resposta da IA não era um array de itens');
-  return items;
+  const validated = z.array(z.object({ description: v.name, qty: v.quantity, unitPrice: v.money })).max(200).safeParse(items);
+  if (!validated.success) throw Object.assign(new Error('O provedor retornou itens inválidos. Tente novamente.'), { status: 502 });
+  return validated.data;
 }
 
 async function summarizeClientHistory({ client, budgets, serviceOrders }) {

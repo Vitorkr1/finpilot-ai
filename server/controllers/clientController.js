@@ -4,13 +4,15 @@ const Budget = require('../models/Budget');
 const ServiceOrder = require('../models/ServiceOrder');
 const asyncHandler = require('../utils/asyncHandler');
 const { logAction } = require('../services/audit');
+const v = require('../utils/validation');
+const transaction = require('../utils/transaction');
 
 const clientSchema = z.object({
-  name: z.string().min(1),
-  phone: z.string().optional(),
-  document: z.string().optional(),
-  address: z.string().optional(),
-  notes: z.string().optional(),
+  name: v.name,
+  phone: v.text(40).optional(),
+  document: v.text(40).optional(),
+  address: v.text(500).optional(),
+  notes: v.text().optional(),
 });
 
 const list = asyncHandler(async (req, res) => {
@@ -44,8 +46,14 @@ const update = asyncHandler(async (req, res) => {
 });
 
 const remove = asyncHandler(async (req, res) => {
-  const client = await Client.findOneAndDelete({ _id: req.params.id, companyId: req.user.companyId });
-  if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
+  const client = await transaction(async (session) => {
+    const client = await Client.findOneAndDelete({ _id: req.params.id, companyId: req.user.companyId }).session(session);
+    if (!client) throw v.httpError(404, 'Cliente não encontrado.');
+    const budget = await Budget.exists({ clientId: client._id, companyId: req.user.companyId }).session(session);
+    const order = await ServiceOrder.exists({ clientId: client._id, companyId: req.user.companyId }).session(session);
+    if (budget || order) throw v.httpError(409, 'Este cliente tem orçamentos ou ordens de serviço. Preserve o histórico antes de excluir.');
+    return client;
+  });
   await logAction({ companyId: req.user.companyId, userId: req.user._id, action: 'delete', entity: 'Client', entityId: client._id });
   res.status(204).end();
 });
@@ -56,7 +64,7 @@ const history = asyncHandler(async (req, res) => {
 
   const [budgets, serviceOrders] = await Promise.all([
     Budget.find({ clientId: client._id, companyId: req.user.companyId }).sort({ createdAt: -1 }),
-    ServiceOrder.find({ clientId: client._id, companyId: req.user.companyId }).sort({ createdAt: -1 }),
+    ServiceOrder.find({ clientId: client._id, companyId: req.user.companyId, ...(req.user.role === 'tecnico' ? { technicianId: req.user._id } : {}) }).sort({ createdAt: -1 }),
   ]);
 
   res.json({ client, budgets, serviceOrders });

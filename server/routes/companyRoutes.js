@@ -3,6 +3,8 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { list, getOne, create, update, setPlan, markPaid, suspend, remove } = require('../controllers/companyController');
 
 const router = express.Router();
+router.param('id', require('../utils/validation').validateId);
+router.param('clientId', require('../utils/validation').validateId);
 
 router.use(requireAuth, requireRole('super_admin'));
 router.get('/', list);

@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useSuperAdminAuth } from '../context/SuperAdminAuthContext'
-import { api } from '../lib/api'
+import { adminApi as api } from '../lib/api'
 import { DarkFooter } from '../components/DarkFooter'
 import type { Company, Plan } from '../lib/types'
 
@@ -19,6 +19,7 @@ const STATUS_LABEL: Record<Company['subscriptionStatus'], string> = {
 export function SuperAdminDashboardPage() {
   const { user, logout } = useSuperAdminAuth()
   const [companies, setCompanies] = useState<Company[]>([])
+  const [pending, setPending] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState({
@@ -65,9 +66,16 @@ export function SuperAdminDashboardPage() {
     }
   }
 
+  async function runAction(action: () => Promise<unknown>) {
+    if (pending) return
+    setPending(true); setError(null)
+    try { await action(); await loadCompanies() }
+    catch (err: unknown) { setError((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Não foi possível concluir a alteração. Tente novamente.') }
+    finally { setPending(false) }
+  }
+
   async function setPlan(id: string, plan: Plan) {
-    await api.patch(`/companies/${id}/plan`, { plan })
-    await loadCompanies()
+    await runAction(() => api.patch(`/companies/${id}/plan`, { plan }))
   }
 
   async function markPaid(id: string) {
@@ -75,35 +83,28 @@ export function SuperAdminDashboardPage() {
       'Próximo vencimento (AAAA-MM-DD), opcional:',
     )
     if (nextDueDate === null) return
-    await api.patch(
-      `/companies/${id}/mark-paid`,
-      nextDueDate ? { nextDueDate } : {},
-    )
-    await loadCompanies()
+    await runAction(() => api.patch(`/companies/${id}/mark-paid`, nextDueDate ? { nextDueDate } : {}))
   }
 
   async function suspend(id: string) {
     if (!confirm('Suspender esta empresa?')) return
-    await api.patch(`/companies/${id}/suspend`)
-    await loadCompanies()
+    await runAction(() => api.patch(`/companies/${id}/suspend`))
   }
 
   async function editName(company: Company) {
     const name = window.prompt('Novo nome da empresa:', company.name)
     if (!name || name === company.name) return
-    await api.patch(`/companies/${company._id}`, { name })
-    await loadCompanies()
+    await runAction(() => api.patch(`/companies/${company._id}`, { name }))
   }
 
   async function remove(id: string, name: string) {
     if (
       !confirm(
-        `Excluir "${name}" e todos os seus usuários? Esta ação não pode ser desfeita.`,
+        `Excluir "${name}" e todos os seus dados? Esta ação não pode ser desfeita.`,
       )
     )
       return
-    await api.delete(`/companies/${id}`, { data: { confirm: true } })
-    await loadCompanies()
+    await runAction(() => api.delete(`/companies/${id}`, { data: { confirm: true } }))
   }
 
   return (
@@ -114,7 +115,7 @@ export function SuperAdminDashboardPage() {
           <div className="flex items-center gap-3 text-sm text-slate-400">
             <span>{user?.name}</span>
             <button
-              onClick={logout}
+              onClick={() => logout().catch(() => setError('Não foi possível sair da conta.'))}
               className="rounded-lg border border-slate-700 px-3 py-1.5 hover:bg-slate-800"
             >
               Sair
@@ -189,6 +190,7 @@ export function SuperAdminDashboardPage() {
             />
           </label>
           <select
+                      disabled={pending}
             value={form.plan}
             onChange={(e) => setForm({ ...form, plan: e.target.value as Plan })}
             className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
@@ -198,7 +200,7 @@ export function SuperAdminDashboardPage() {
           </select>
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || pending}
             className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-900 hover:bg-white disabled:opacity-60"
           >
             {submitting ? 'Criando...' : 'Criar empresa'}
@@ -233,6 +235,7 @@ export function SuperAdminDashboardPage() {
                     <td className="px-4 py-2 font-medium">{c.name}</td>
                     <td className="px-4 py-2">
                       <select
+                      disabled={pending}
                         value={c.plan}
                         onChange={(e) => setPlan(c._id, e.target.value as Plan)}
                         className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs"
@@ -255,24 +258,28 @@ export function SuperAdminDashboardPage() {
                     </td>
                     <td className="space-x-3 px-4 py-2 text-right text-xs">
                       <button
+                        disabled={pending}
                         onClick={() => editName(c)}
                         className="text-slate-300 hover:underline"
                       >
                         Editar
                       </button>
                       <button
+                        disabled={pending}
                         onClick={() => markPaid(c._id)}
                         className="text-green-400 hover:underline"
                       >
                         Marcar pago
                       </button>
                       <button
+                        disabled={pending}
                         onClick={() => suspend(c._id)}
                         className="text-amber-400 hover:underline"
                       >
                         Suspender
                       </button>
                       <button
+                        disabled={pending}
                         onClick={() => remove(c._id, c.name)}
                         className="text-red-400 hover:underline"
                       >

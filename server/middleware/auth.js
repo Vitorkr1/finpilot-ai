@@ -1,5 +1,6 @@
 const { verifyAccessToken } = require('../utils/tokens');
 const User = require('../models/User');
+const AuthSession = require('../models/AuthSession');
 const asyncHandler = require('../utils/asyncHandler');
 
 const requireAuth = asyncHandler(async (req, res, next) => {
@@ -21,8 +22,13 @@ const requireAuth = asyncHandler(async (req, res, next) => {
   if (!user || !user.active) {
     return res.status(401).json({ error: 'Usuário inválido' });
   }
+  const session = await AuthSession.findOne({ _id: payload.sid, userId: user._id, expiresAt: { $gt: new Date() } });
+  if (!session || (session.scope === 'admin') !== (user.role === 'super_admin')) {
+    return res.status(401).json({ error: 'Sessão encerrada. Entre novamente.' });
+  }
 
   req.user = user;
+  req.authSession = session;
   next();
 });
 

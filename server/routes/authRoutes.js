@@ -4,6 +4,8 @@ const { login, adminLogin, refresh, adminRefresh, logout, me } = require('../con
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
+router.param('id', require('../utils/validation').validateId);
+router.param('clientId', require('../utils/validation').validateId);
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -18,6 +20,7 @@ router.post('/admin-login', loginLimiter, adminLogin);
 router.post('/refresh', refresh);
 router.post('/admin-refresh', adminRefresh);
 router.post('/logout', logout);
+router.post('/admin-logout', logout);
 router.get('/me', requireAuth, me);
 
 module.exports = router;

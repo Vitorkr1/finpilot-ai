@@ -20,13 +20,13 @@ const budgetSchema = new mongoose.Schema(
     status: { type: String, enum: STATUSES, default: 'rascunho' },
     convertedToServiceOrder: { type: Boolean, default: false },
   },
-  { timestamps: true }
+  { timestamps: true, optimisticConcurrency: true }
 );
 
 budgetSchema.index({ companyId: 1, clientId: 1 });
 
 budgetSchema.pre('validate', function computeTotal(next) {
-  this.total = this.items.reduce((sum, item) => sum + item.qty * item.unitPrice, 0);
+  this.total = Math.round(this.items.reduce((sum, item) => sum + Math.round(item.qty * item.unitPrice * 100), 0)) / 100;
   next();
 });
 

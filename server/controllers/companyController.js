@@ -4,6 +4,8 @@ const Company = require('../models/Company');
 const User = require('../models/User');
 const asyncHandler = require('../utils/asyncHandler');
 const { logAction } = require('../services/audit');
+const v = require('../utils/validation');
+const transaction = require('../utils/transaction');
 
 // Rotas restritas ao super_admin: apenas dados administrativos da empresa
 // (plano, status de assinatura). Nunca expõe dados operacionais do tenant.
@@ -19,9 +21,9 @@ const getOne = asyncHandler(async (req, res) => {
 });
 
 const createSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
-  cnpj: z.string().optional(),
+  name: v.name,
+  email: v.email,
+  cnpj: v.text(40).optional(),
   segment: z.enum(['eletrica', 'solar', 'ar_condicionado', 'seguranca', 'manutencao', 'outro']).optional(),
   plan: z.enum(['basic', 'pro']).optional(),
 });
@@ -31,22 +33,24 @@ const createSchema = z.object({
 const create = asyncHandler(async (req, res) => {
   const data = createSchema.parse(req.body);
 
-  const company = await Company.create({
-    name: data.name,
-    cnpj: data.cnpj,
-    segment: data.segment || 'outro',
-    plan: data.plan || 'basic',
-    subscriptionStatus: 'active',
-  });
-
   const tempPassword = crypto.randomBytes(9).toString('base64url');
   const passwordHash = await User.hashPassword(tempPassword);
-  const adminUser = await User.create({
-    companyId: company._id,
-    name: `Admin ${data.name}`,
-    email: data.email,
-    passwordHash,
-    role: 'admin',
+  const { company, adminUser } = await transaction(async (session) => {
+    const [company] = await Company.create([{
+      name: data.name,
+      cnpj: data.cnpj,
+      segment: data.segment || 'outro',
+      plan: data.plan || 'basic',
+      subscriptionStatus: 'active',
+    }], { session });
+    const [adminUser] = await User.create([{
+      companyId: company._id,
+      name: `Admin ${data.name}`,
+      email: data.email,
+      passwordHash,
+      role: 'admin',
+    }], { session });
+    return { company, adminUser };
   });
 
   await logAction({ userId: req.user._id, action: 'create', entity: 'Company', entityId: company._id });
@@ -54,15 +58,15 @@ const create = asyncHandler(async (req, res) => {
 });
 
 const editSchema = z.object({
-  name: z.string().optional(),
-  cnpj: z.string().optional(),
+  name: v.name.optional(),
+  cnpj: v.text(40).optional(),
   segment: z.enum(['eletrica', 'solar', 'ar_condicionado', 'seguranca', 'manutencao', 'outro']).optional(),
-  price: z.number().nullable().optional(),
+  price: v.money.nullable().optional(),
 });
 
 const update = asyncHandler(async (req, res) => {
   const data = editSchema.parse(req.body);
-  const company = await Company.findByIdAndUpdate(req.params.id, data, { new: true });
+  const company = await Company.findByIdAndUpdate(req.params.id, data, { new: true, runValidators: true });
   if (!company) return res.status(404).json({ error: 'Empresa não encontrada' });
   await logAction({ userId: req.user._id, action: 'update', entity: 'Company', entityId: company._id });
   res.json(company);
@@ -70,14 +74,21 @@ const update = asyncHandler(async (req, res) => {
 
 const setPlan = asyncHandler(async (req, res) => {
   const { plan } = z.object({ plan: z.enum(['basic', 'pro']) }).parse(req.body);
-  const company = await Company.findByIdAndUpdate(req.params.id, { plan }, { new: true });
-  if (!company) return res.status(404).json({ error: 'Empresa não encontrada' });
+  const company = await transaction(async (session) => {
+    const company = await Company.findOneAndUpdate({ _id: req.params.id }, { $inc: { userRevision: 1 } }, { new: true, session });
+    if (!company) throw v.httpError(404, 'Empresa não encontrada.');
+    if (plan === 'basic' && await User.countDocuments({ companyId: company._id, active: true }).session(session) > 3) throw v.httpError(409, 'Desative os acessos excedentes antes de mudar para Basic: o limite é de 3 usuários ativos.');
+    company.plan = plan;
+    await company.save({ session });
+    return company;
+  });
+  if (plan === 'basic') await require('../services/whatsapp').disconnect(company._id);
   await logAction({ userId: req.user._id, action: 'set-plan', entity: 'Company', entityId: company._id, details: { plan } });
   res.json(company);
 });
 
 const markPaid = asyncHandler(async (req, res) => {
-  const { nextDueDate } = z.object({ nextDueDate: z.string().optional() }).parse(req.body);
+  const { nextDueDate } = z.object({ nextDueDate: v.date.optional() }).parse(req.body);
   const update = { subscriptionStatus: 'active' };
   if (nextDueDate) update.nextDueDate = new Date(nextDueDate);
   const company = await Company.findByIdAndUpdate(req.params.id, update, { new: true });
@@ -87,8 +98,15 @@ const markPaid = asyncHandler(async (req, res) => {
 });
 
 const suspend = asyncHandler(async (req, res) => {
-  const company = await Company.findByIdAndUpdate(req.params.id, { subscriptionStatus: 'suspended' }, { new: true });
-  if (!company) return res.status(404).json({ error: 'Empresa não encontrada' });
+  const company = await transaction(async (session) => {
+    const company = await Company.findByIdAndUpdate(req.params.id, { subscriptionStatus: 'suspended' }, { new: true, session });
+    if (!company) throw v.httpError(404, 'Empresa não encontrada.');
+    const users = await User.find({ companyId: company._id }).select('_id').session(session);
+    await require('../models/AuthSession').deleteMany({ userId: { $in: users.map((u) => u._id) } }).session(session);
+    await require('../models/RouteSession').deleteMany({ companyId: company._id }).session(session);
+    return company;
+  });
+  await require('../services/whatsapp').disconnect(company._id);
   await logAction({ userId: req.user._id, action: 'suspend', entity: 'Company', entityId: company._id });
   res.json(company);
 });
@@ -102,8 +120,15 @@ const remove = asyncHandler(async (req, res) => {
   const company = await Company.findById(req.params.id);
   if (!company) return res.status(404).json({ error: 'Empresa não encontrada' });
 
-  await User.deleteMany({ companyId: company._id });
-  await company.deleteOne();
+  await transaction(async (session) => {
+    const users = await User.find({ companyId: company._id }).select('_id').session(session);
+    await require('../models/AuthSession').deleteMany({ userId: { $in: users.map((u) => u._id) } }).session(session);
+    for (const model of ['User', 'Client', 'Budget', 'ServiceOrder', 'Appointment', 'StockItem', 'FinancialEntry', 'RouteSession', 'WhatsAppMessage', 'WhatsAppAuthFile', 'AuditLog']) {
+      await require(`../models/${model}`).deleteMany({ companyId: company._id }).session(session);
+    }
+    await Company.deleteOne({ _id: company._id }).session(session);
+  });
+  await require('../services/whatsapp').disconnect(company._id);
 
   await logAction({ userId: req.user._id, action: 'delete', entity: 'Company', entityId: company._id });
   res.status(204).end();

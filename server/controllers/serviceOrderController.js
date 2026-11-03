@@ -7,38 +7,40 @@ const { getTemplate, getDefaultChecklist } = require('../services/checklistTempl
 const cloudinary = require('../services/cloudinary');
 const asyncHandler = require('../utils/asyncHandler');
 const { logAction } = require('../services/audit');
+const v = require('../utils/validation');
+const transaction = require('../utils/transaction');
 
 const addMaterialSchema = z.object({
-  stockItemId: z.string().min(1),
-  qty: z.number().positive(),
+  stockItemId: v.objectId,
+  qty: v.quantity.refine((value) => value > 0),
 });
 
 const createSchema = z.object({
-  clientId: z.string().min(1),
-  technicianId: z.string().optional(),
+  clientId: v.objectId,
+  technicianId: v.objectId.optional(),
   segment: z.enum(['eletrica', 'solar', 'ar_condicionado', 'seguranca', 'manutencao', 'outro']).optional(),
-  laborHours: z.number().nonnegative().optional(),
+  laborHours: v.quantity.optional(),
 });
 
 const updateSchema = z.object({
-  technicianId: z.string().nullable().optional(),
+  technicianId: v.objectId.nullable().optional(),
   status: z.enum(['aberta', 'em_andamento', 'concluida', 'cancelada']).optional(),
-  laborHours: z.number().nonnegative().optional(),
-  checklist: z.array(z.object({ item: z.string(), done: z.boolean() })).optional(),
-  photos: z.array(z.string()).optional(),
-  signatureUrl: z.string().nullable().optional(),
+  laborHours: v.quantity.optional(),
+  checklist: z.array(z.object({ item: v.name, done: z.boolean() })).max(200).optional(),
 });
 
 const list = asyncHandler(async (req, res) => {
   const filter = { companyId: req.user.companyId };
-  if (req.query.status) filter.status = req.query.status;
-  if (req.query.technicianId) filter.technicianId = req.query.technicianId;
+  const query = z.object({ status: z.enum(['aberta', 'em_andamento', 'concluida', 'cancelada']).optional(), technicianId: v.objectId.optional() }).parse(req.query);
+  if (query.status) filter.status = query.status;
+  if (query.technicianId) filter.technicianId = query.technicianId;
+  if (req.user.role === 'tecnico') filter.technicianId = req.user._id;
   const orders = await ServiceOrder.find(filter).sort({ createdAt: -1 });
   res.json(orders);
 });
 
 const getOne = asyncHandler(async (req, res) => {
-  const order = await ServiceOrder.findOne({ _id: req.params.id, companyId: req.user.companyId });
+  const order = await ServiceOrder.findOne({ _id: req.params.id, companyId: req.user.companyId, ...(req.user.role === 'tecnico' ? { technicianId: req.user._id } : {}) });
   if (!order) return res.status(404).json({ error: 'Ordem de serviço não encontrada' });
   res.json(order);
 });
@@ -50,30 +52,36 @@ const create = asyncHandler(async (req, res) => {
   if (!client) return res.status(400).json({ error: 'Cliente não encontrado nesta empresa' });
 
   if (data.technicianId) {
-    const tech = await User.findOne({ _id: data.technicianId, companyId: req.user.companyId });
+    const tech = await User.findOne({ _id: data.technicianId, companyId: req.user.companyId, active: true, role: 'tecnico' });
     if (!tech) return res.status(400).json({ error: 'Técnico não encontrado nesta empresa' });
   }
 
   // Pro: checklist dinâmico por segmento. Basic: checklist fixo simples (Seção 5).
   const checklist = req.company.plan === 'pro' && data.segment ? getTemplate(data.segment) : getDefaultChecklist();
 
-  const order = await ServiceOrder.create({ ...data, companyId: req.user.companyId, checklist });
+  const order = await transaction(async (session) => {
+    const reference = await Client.findOneAndUpdate({ _id: data.clientId, companyId: req.user.companyId }, { $inc: { __v: 1 } }, { session });
+    if (!reference) throw v.httpError(400, 'Cliente não encontrado nesta empresa.');
+    const [created] = await ServiceOrder.create([{ ...data, companyId: req.user.companyId, checklist }], { session });
+    return created;
+  });
   await logAction({ companyId: req.user.companyId, userId: req.user._id, action: 'create', entity: 'ServiceOrder', entityId: order._id });
   res.status(201).json(order);
 });
 
 const update = asyncHandler(async (req, res) => {
   const data = updateSchema.parse(req.body);
+  if (req.user.role === 'tecnico' && ('technicianId' in data || 'laborHours' in data)) throw v.httpError(403, 'Técnicos podem atualizar apenas o andamento e o checklist das próprias ordens.');
 
   if (data.technicianId) {
-    const tech = await User.findOne({ _id: data.technicianId, companyId: req.user.companyId });
+    const tech = await User.findOne({ _id: data.technicianId, companyId: req.user.companyId, active: true, role: 'tecnico' });
     if (!tech) return res.status(400).json({ error: 'Técnico não encontrado nesta empresa' });
   }
 
   const order = await ServiceOrder.findOneAndUpdate(
-    { _id: req.params.id, companyId: req.user.companyId },
+    { _id: req.params.id, companyId: req.user.companyId, ...(req.user.role === 'tecnico' ? { technicianId: req.user._id } : {}) },
     data,
-    { new: true }
+    { new: true, runValidators: true }
   );
   if (!order) return res.status(404).json({ error: 'Ordem de serviço não encontrada' });
   await logAction({ companyId: req.user.companyId, userId: req.user._id, action: 'update', entity: 'ServiceOrder', entityId: order._id });
@@ -81,8 +89,14 @@ const update = asyncHandler(async (req, res) => {
 });
 
 const remove = asyncHandler(async (req, res) => {
-  const order = await ServiceOrder.findOneAndDelete({ _id: req.params.id, companyId: req.user.companyId });
-  if (!order) return res.status(404).json({ error: 'Ordem de serviço não encontrada' });
+  const order = await transaction(async (session) => {
+    const order = await ServiceOrder.findOneAndDelete({ _id: req.params.id, companyId: req.user.companyId }).session(session);
+    if (!order) throw v.httpError(404, 'Ordem de serviço não encontrada.');
+    const financial = await require('../models/FinancialEntry').exists({ companyId: req.user.companyId, relatedServiceOrderId: order._id }).session(session);
+    const appointment = await require('../models/Appointment').exists({ companyId: req.user.companyId, serviceOrderId: order._id }).session(session);
+    if (order.materialsUsed.length || financial || appointment) throw v.httpError(409, 'Esta ordem possui materiais, agendamentos ou lançamentos. Cancele a ordem para preservar o histórico.');
+    return order;
+  });
   await logAction({ companyId: req.user.companyId, userId: req.user._id, action: 'delete', entity: 'ServiceOrder', entityId: order._id });
   res.status(204).end();
 });
@@ -96,20 +110,16 @@ const checklistTemplate = asyncHandler(async (req, res) => {
 const addMaterial = asyncHandler(async (req, res) => {
   const { stockItemId, qty } = addMaterialSchema.parse(req.body);
 
-  const order = await ServiceOrder.findOne({ _id: req.params.id, companyId: req.user.companyId });
-  if (!order) return res.status(404).json({ error: 'Ordem de serviço não encontrada' });
-
-  const stockItem = await StockItem.findOneAndUpdate(
-    { _id: stockItemId, companyId: req.user.companyId, quantity: { $gte: qty } },
-    { $inc: { quantity: -qty } },
-    { new: true }
-  );
-  if (!stockItem) {
-    return res.status(409).json({ error: 'Estoque insuficiente ou item não encontrado' });
-  }
-
-  order.materialsUsed.push({ stockItemId, qty });
-  await order.save();
+  const order = await transaction(async (session) => {
+    const scope = { _id: req.params.id, companyId: req.user.companyId, ...(req.user.role === 'tecnico' ? { technicianId: req.user._id } : {}) };
+    const exists = await ServiceOrder.exists(scope).session(session);
+    if (!exists) throw v.httpError(404, 'Ordem de serviço não encontrada.');
+    const stockItem = await StockItem.findOneAndUpdate(
+      { _id: stockItemId, companyId: req.user.companyId, quantity: { $gte: qty } },
+      { $inc: { quantity: -qty } }, { new: true, session });
+    if (!stockItem) throw v.httpError(409, 'Estoque insuficiente ou item não encontrado.');
+    return ServiceOrder.findOneAndUpdate(scope, { $push: { materialsUsed: { stockItemId, qty } } }, { new: true, runValidators: true, session });
+  });
 
   await logAction({
     companyId: req.user.companyId,
@@ -128,25 +138,26 @@ const addMaterial = asyncHandler(async (req, res) => {
 const addPhoto = asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Envie um arquivo de imagem no campo "photo"' });
 
-  const order = await ServiceOrder.findOne({ _id: req.params.id, companyId: req.user.companyId });
+  const order = await ServiceOrder.findOne({ _id: req.params.id, companyId: req.user.companyId, ...(req.user.role === 'tecnico' ? { technicianId: req.user._id } : {}) });
   if (!order) return res.status(404).json({ error: 'Ordem de serviço não encontrada' });
 
   const url = await cloudinary.uploadBuffer(req.file.buffer, `criaos/${req.user.companyId}/service-orders`);
-  order.photos.push(url);
-  await order.save();
+  const updated = await ServiceOrder.findOneAndUpdate({ _id: order._id, companyId: req.user.companyId, ...(req.user.role === 'tecnico' ? { technicianId: req.user._id } : {}) }, { $push: { photos: url } }, { new: true });
+  if (!updated) throw v.httpError(409, 'A ordem de serviço foi removida durante o envio.');
 
   await logAction({ companyId: req.user.companyId, userId: req.user._id, action: 'add-photo', entity: 'ServiceOrder', entityId: order._id });
-  res.status(201).json(order);
+  res.status(201).json(updated);
 });
 
 const setSignature = asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Envie um arquivo de imagem no campo "signature"' });
 
-  const order = await ServiceOrder.findOne({ _id: req.params.id, companyId: req.user.companyId });
+  const order = await ServiceOrder.findOne({ _id: req.params.id, companyId: req.user.companyId, ...(req.user.role === 'tecnico' ? { technicianId: req.user._id } : {}) });
   if (!order) return res.status(404).json({ error: 'Ordem de serviço não encontrada' });
 
-  order.signatureUrl = await cloudinary.uploadBuffer(req.file.buffer, `criaos/${req.user.companyId}/signatures`);
-  await order.save();
+  const url = await cloudinary.uploadBuffer(req.file.buffer, `criaos/${req.user.companyId}/signatures`);
+  const updated = await ServiceOrder.findOneAndUpdate({ _id: order._id, companyId: req.user.companyId, ...(req.user.role === 'tecnico' ? { technicianId: req.user._id } : {}) }, { $set: { signatureUrl: url } }, { new: true });
+  if (!updated) throw v.httpError(409, 'A ordem foi removida ou atribuída a outro técnico durante o envio.');
 
   await logAction({ companyId: req.user.companyId, userId: req.user._id, action: 'set-signature', entity: 'ServiceOrder', entityId: order._id });
   res.status(201).json(order);

@@ -56,7 +56,7 @@ export function SuperAdminLoginPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-300">
+              <label htmlFor="admin-password" className="mb-1 block text-sm font-medium text-slate-300">
                 Senha
               </label>
               <input

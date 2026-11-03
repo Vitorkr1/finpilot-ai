@@ -6,7 +6,7 @@ const ai = require('../services/ai');
 const asyncHandler = require('../utils/asyncHandler');
 
 const draftBudget = asyncHandler(async (req, res) => {
-  const { description } = z.object({ description: z.string().min(1) }).parse(req.body);
+  const { description } = z.object({ description: z.string().trim().min(1).max(8000) }).parse(req.body);
   const items = await ai.draftBudgetItems(description);
   res.json({ items });
 });
@@ -17,7 +17,7 @@ const clientSummary = asyncHandler(async (req, res) => {
 
   const [budgets, serviceOrders] = await Promise.all([
     Budget.find({ clientId: client._id, companyId: req.user.companyId }).sort({ createdAt: -1 }).limit(20),
-    ServiceOrder.find({ clientId: client._id, companyId: req.user.companyId }).sort({ createdAt: -1 }).limit(20),
+    ServiceOrder.find({ clientId: client._id, companyId: req.user.companyId, ...(req.user.role === 'tecnico' ? { technicianId: req.user._id } : {}) }).sort({ createdAt: -1 }).limit(20),
   ]);
 
   const summary = await ai.summarizeClientHistory({ client, budgets, serviceOrders });
@@ -25,7 +25,7 @@ const clientSummary = asyncHandler(async (req, res) => {
 });
 
 const ask = asyncHandler(async (req, res) => {
-  const { question } = z.object({ question: z.string().min(1) }).parse(req.body);
+  const { question } = z.object({ question: z.string().trim().min(1).max(8000) }).parse(req.body);
   const answer = await ai.answerQuestion(question);
   res.json({ answer });
 });

@@ -47,6 +47,7 @@ const shortcuts: { to: string; label: string; text: string; icon: IconName }[] =
   ]
 export function DashboardPage() {
   const { user, company } = useAuth()
+  const financial = user?.role === 'admin' || user?.role === 'financeiro'
   const [summary, setSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -211,7 +212,7 @@ export function DashboardPage() {
       ) : (
         <>
           <div className="metrics-grid">
-            {cards.map((card) => (
+            {cards.filter((card) => financial || card.to !== '/financeiro').map((card) => (
               <Link to={card.to} className="metric-card" key={card.label}>
                 <div className="metric-top">
                   <span>{card.label}</span>
@@ -225,7 +226,7 @@ export function DashboardPage() {
             ))}
           </div>
           <div className="dashboard-columns">
-            <section className="panel">
+            {financial && <section className="panel">
               <div className="section-heading">
                 <div>
                   <h3>Panorama financeiro</h3>
@@ -308,7 +309,7 @@ export function DashboardPage() {
                   {currency.format(balance)}
                 </strong>
               </div>
-            </section>
+            </section>}
             <section className="panel operation-panel">
               <div className="section-heading">
                 <div>

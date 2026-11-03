@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { api, setAccessToken, setRefreshEndpoint } from '../lib/api'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { adminApi as api, setAdminAccessToken as setAccessToken } from '../lib/api'
 import type { User } from '../lib/types'
 
 // Contexto de autenticação separado do AuthContext dos tenants — login
@@ -19,31 +19,42 @@ const SuperAdminAuthContext = createContext<SuperAdminAuthValue | null>(null)
 export function SuperAdminAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const epoch = useRef(0)
 
   useEffect(() => {
-    setRefreshEndpoint('/auth/admin-refresh')
+    let active = true
+    const started = epoch.current
     ;(async () => {
       try {
         const { data } = await api.post('/auth/admin-refresh')
+        if (!active || epoch.current !== started) return
         setAccessToken(data.accessToken)
         setUser(data.user)
       } catch {
-        setAccessToken(null)
+        if (active && epoch.current === started) setAccessToken(null)
       } finally {
-        setLoading(false)
+        if (active) setLoading(false)
       }
     })()
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    const ended = () => { epoch.current++; setUser(null) }
+    window.addEventListener('criaos:admin-session-ended', ended)
+    return () => window.removeEventListener('criaos:admin-session-ended', ended)
   }, [])
 
   async function login(email: string, password: string) {
-    setRefreshEndpoint('/auth/admin-refresh')
+    epoch.current++
     const { data } = await api.post('/auth/admin-login', { email, password })
     setAccessToken(data.accessToken)
     setUser(data.user)
   }
 
   async function logout() {
-    await api.post('/auth/logout')
+    epoch.current++
+    await api.post('/auth/admin-logout')
     setAccessToken(null)
     setUser(null)
   }

@@ -3,6 +3,8 @@ const rateLimit = require('express-rate-limit');
 const { bootstrapSuperAdmin, resetSuperAdminPassword } = require('../controllers/setupController');
 
 const router = express.Router();
+router.param('id', require('../utils/validation').validateId);
+router.param('clientId', require('../utils/validation').validateId);
 
 const setupLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

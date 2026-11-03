@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { useAuth } from '../context/AuthContext'
 import { AppLayout } from '../components/AppLayout'
 import { api } from '../lib/api'
-import type { Client, ServiceOrder, ServiceOrderStatus } from '../lib/types'
+import type { Client, ServiceOrder, ServiceOrderStatus, User } from '../lib/types'
 
 const SEGMENTS = [
   { value: 'eletrica', label: 'Elétrica' },
@@ -20,6 +21,11 @@ const STATUS_LABEL: Record<ServiceOrderStatus, string> = {
 }
 
 export function ServiceOrdersPage() {
+  const { user } = useAuth()
+  const management = user?.role === 'admin' || user?.role === 'financeiro'
+  const [technicians, setTechnicians] = useState<User[]>([])
+  const [technicianId, setTechnicianId] = useState('')
+  const [pending, setPending] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState('todos')
   const [orders, setOrders] = useState<ServiceOrder[]>([])
   const [clients, setClients] = useState<Client[]>([])
@@ -47,6 +53,7 @@ export function ServiceOrdersPage() {
   }
 
   useEffect(() => {
+    if (management) api.get<User[]>('/company-users/technicians').then(({ data }) => setTechnicians(data)).catch(() => setError('Não foi possível carregar os técnicos.'))
     loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -56,7 +63,7 @@ export function ServiceOrdersPage() {
     setSubmitting(true)
     setError(null)
     try {
-      await api.post('/service-orders', { clientId, segment })
+      await api.post('/service-orders', { clientId, segment, ...(technicianId ? { technicianId } : {}) })
       await loadData()
     } catch {
       setError('Não foi possível criar a ordem de serviço.')
@@ -66,16 +73,20 @@ export function ServiceOrdersPage() {
   }
 
   async function updateStatus(id: string, status: ServiceOrderStatus) {
-    await api.patch(`/service-orders/${id}`, { status })
-    await loadData()
+    setPending(id); setError(null)
+    try { await api.patch(`/service-orders/${id}`, { status }); await loadData() }
+    catch { setError('Não foi possível atualizar a ordem. Tente novamente.') }
+    finally { setPending(null) }
   }
 
   async function toggleChecklistItem(order: ServiceOrder, index: number) {
     const checklist = order.checklist.map((it, i) =>
       i === index ? { ...it, done: !it.done } : it,
     )
-    await api.patch(`/service-orders/${order._id}`, { checklist })
-    await loadData()
+    setPending(order._id); setError(null)
+    try { await api.patch(`/service-orders/${order._id}`, { checklist }); await loadData() }
+    catch { setError('Não foi possível salvar o checklist. Tente novamente.') }
+    finally { setPending(null) }
   }
 
   async function uploadPhoto(orderId: string, file: File) {
@@ -107,7 +118,7 @@ export function ServiceOrdersPage() {
         Organize a execução, acompanhe os checklists e registre cada entrega.
       </p>
 
-      <form
+      {management && <form
         onSubmit={handleSubmit}
         className="mb-8 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3"
       >
@@ -137,6 +148,10 @@ export function ServiceOrdersPage() {
             </option>
           ))}
         </select>
+        <select aria-label="Técnico responsável" value={technicianId} onChange={(e) => setTechnicianId(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <option value="">Sem técnico atribuído</option>
+          {technicians.map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}
+        </select>
         <button
           type="submit"
           disabled={submitting || !clientId}
@@ -145,7 +160,8 @@ export function ServiceOrdersPage() {
           {submitting ? 'Abrindo...' : 'Abrir OS'}
         </button>
         {error && <p className="sm:col-span-3 text-sm text-red-600">{error}</p>}
-      </form>
+      </form>}
+      {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
 
       <div className="list-toolbar">
         <div className="filter-tabs" aria-label="Filtrar por status">
@@ -196,7 +212,18 @@ export function ServiceOrdersPage() {
                       {order.laborHours}h registradas
                     </p>
                   </div>
+                  {management && <select aria-label="Atribuir técnico à ordem" value={order.technicianId || ''} disabled={pending === order._id} onChange={async (e) => {
+                    setPending(order._id); setError(null)
+                    try { await api.patch(`/service-orders/${order._id}`, { technicianId: e.target.value || null }); await loadData() }
+                    catch { setError('Não foi possível atribuir o técnico.') }
+                    finally { setPending(null) }
+                  }} className="rounded-lg border border-slate-300 px-2 py-1 text-sm">
+                    <option value="">Sem técnico atribuído</option>
+                    {technicians.map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}
+                  </select>}
                   <select
+                    aria-label="Status da ordem"
+                    disabled={pending === order._id}
                     value={order.status}
                     onChange={(e) =>
                       updateStatus(
@@ -219,6 +246,7 @@ export function ServiceOrdersPage() {
                       <input
                         type="checkbox"
                         checked={item.done}
+                        disabled={pending === order._id}
                         onChange={() => toggleChecklistItem(order, index)}
                         className="h-4 w-4 rounded border-slate-300"
                       />

@@ -11,6 +11,7 @@ const ROLE_LABEL: Record<string, string> = {
 
 export function CompanyUsersPage() {
   const [users, setUsers] = useState<User[]>([])
+  const [pending, setPending] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [createdInfo, setCreatedInfo] = useState<string | null>(null)
@@ -60,10 +61,10 @@ export function CompanyUsersPage() {
   }
 
   async function toggleActive(userToToggle: User) {
-    await api.patch(`/company-users/${userToToggle._id}/active`, {
-      active: !userToToggle.active,
-    })
-    await loadUsers()
+    setPending(userToToggle._id); setError(null)
+    try { await api.patch(`/company-users/${userToToggle._id}/active`, { active: !userToToggle.active }); await loadUsers() }
+    catch (err: unknown) { setError((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Não foi possível alterar o acesso.') }
+    finally { setPending(null) }
   }
 
   return (
@@ -163,6 +164,7 @@ export function CompanyUsersPage() {
                   </td>
                   <td className="px-4 py-2 text-right">
                     <button
+                      disabled={pending === u._id}
                       onClick={() => toggleActive(u)}
                       className="text-brand-600 hover:underline"
                     >

@@ -65,6 +65,7 @@ const SuperAdminApp = lazy(() =>
   })),
 )
 import { SUPER_ADMIN_PATH } from './lib/superAdminPath'
+const RoutesPage = lazy(() => import('./pages/RoutesPage').then((m) => ({ default: m.RoutesPage })))
 
 export default function App() {
   return (
@@ -101,6 +102,7 @@ function TenantRoutes() {
     >
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/rotas" element={<ProtectedRoute><RoutesPage /></ProtectedRoute>} />
         <Route
           path="/"
           element={
@@ -160,7 +162,7 @@ function TenantRoutes() {
         <Route
           path="/financeiro"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute roles={['admin', 'financeiro']}>
               <FinancialPage />
             </ProtectedRoute>
           }
@@ -176,7 +178,7 @@ function TenantRoutes() {
         <Route
           path="/configuracoes/whatsapp"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute roles={['admin']}>
               <WhatsAppSettingsPage />
             </ProtectedRoute>
           }
@@ -184,7 +186,7 @@ function TenantRoutes() {
         <Route
           path="/usuarios"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute roles={['admin']}>
               <CompanyUsersPage />
             </ProtectedRoute>
           }

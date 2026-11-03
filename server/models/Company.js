@@ -13,6 +13,7 @@ const companySchema = new mongoose.Schema(
     price: { type: Number, default: null },
     subscriptionStatus: { type: String, enum: SUBSCRIPTION_STATUSES, default: 'active' },
     nextDueDate: { type: Date },
+    userRevision: { type: Number, default: 0, select: false },
   },
   { timestamps: true }
 );

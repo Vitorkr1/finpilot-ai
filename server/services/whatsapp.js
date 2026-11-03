@@ -7,6 +7,7 @@ const QRCode = require('qrcode');
 const { useMongoAuthState, clearAuthState } = require('./whatsappAuthState');
 const WhatsAppMessage = require('../models/WhatsAppMessage');
 const ai = require('./ai');
+const Company = require('../models/Company');
 
 const logger = pino({ level: process.env.WHATSAPP_LOG_LEVEL || 'error' });
 
@@ -27,9 +28,11 @@ function getStatus(companyId) {
 async function handleIncomingMessages(companyId, { messages, type }) {
   if (type !== 'notify') return;
 
-  for (const msg of messages) {
+  const company = await Company.findById(companyId);
+  if (!company || company.plan !== 'pro' || company.subscriptionStatus === 'suspended') return disconnect(companyId);
+  for (const msg of messages.slice(0, 100)) {
     if (msg.key.fromMe || !msg.message) continue;
-    const text = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
+    const text = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').slice(0, 8000);
     if (!text) continue;
 
     const record = await WhatsAppMessage.create({
@@ -54,72 +57,88 @@ async function handleIncomingMessages(companyId, { messages, type }) {
 async function connect(companyId) {
   const key = String(companyId);
   const existing = sessions.get(key);
-  if (existing && (existing.status === 'connected' || existing.status === 'connecting')) {
+  if (existing && (existing.status === 'connected' || existing.status === 'connecting' || existing.status === 'qr')) {
     return getStatus(key);
   }
 
-  const session = { sock: null, status: 'connecting', qr: null };
+  if (existing?.timer) clearTimeout(existing.timer);
+  const session = { sock: null, status: 'connecting', qr: null, closed: false, timer: null };
   sessions.set(key, session);
 
-  const { state, saveCreds, clearAll } = await useMongoAuthState(companyId);
-  const { version } = await fetchLatestBaileysVersion();
+  try {
+    const company = await Company.findById(companyId);
+    if (!company || company.plan !== 'pro' || company.subscriptionStatus === 'suspended') throw Object.assign(new Error('WhatsApp indisponível para esta empresa.'), { status: 403 });
+    const { state, saveCreds, clearAll } = await useMongoAuthState(companyId);
+    const { version } = await fetchLatestBaileysVersion();
+    if (session.closed || sessions.get(key) !== session) return getStatus(key);
 
-  const sock = makeWASocket({
-    version,
-    logger,
-    printQRInTerminal: false,
-    auth: {
-      creds: state.creds,
-      keys: makeCacheableSignalKeyStore(state.keys, logger),
-    },
-  });
-  session.sock = sock;
+    const sock = makeWASocket({
+      version,
+      logger,
+      printQRInTerminal: false,
+      auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, logger),
+      },
+    });
+    session.sock = sock;
 
-  sock.ev.on('creds.update', saveCreds);
+    sock.ev.on('creds.update', () => { if (!session.closed) saveCreds().catch((err) => logger.error({ err: err.message }, 'falha ao salvar credenciais')); });
 
-  sock.ev.on('messages.upsert', (payload) => {
-    handleIncomingMessages(companyId, payload).catch((err) => logger.error({ err: err.message }, 'erro processando mensagem recebida'));
-  });
+    sock.ev.on('messages.upsert', (payload) => {
+      if (session.closed || sessions.get(key) !== session) return;
+      handleIncomingMessages(companyId, payload).catch((err) => logger.error({ err: err.message }, 'erro processando mensagem recebida'));
+    });
 
-  sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect, qr } = update;
+    const connectionUpdate = async (update) => {
+      if (session.closed || sessions.get(key) !== session) return;
+      const { connection, lastDisconnect, qr } = update;
 
-    if (qr) {
-      session.qr = await QRCode.toDataURL(qr);
-      session.status = 'qr';
-    }
-
-    if (connection === 'open') {
-      session.status = 'connected';
-      session.qr = null;
-    }
-
-    if (connection === 'close') {
-      const statusCode = lastDisconnect?.error?.output?.statusCode;
-      const loggedOut = statusCode === DisconnectReason.loggedOut;
-
-      if (loggedOut) {
-        session.status = 'disconnected';
-        session.qr = null;
-        sessions.delete(key);
-        await clearAll();
-      } else {
-        // Reconexão automática (Seção 11): o Render free "dorme" e derruba a
-        // conexão do WhatsApp — reconecta sozinho ao acordar.
-        session.status = 'reconnecting';
-        setTimeout(() => {
-          connect(companyId).catch((err) => logger.error({ err: err.message }, 'falha ao reconectar WhatsApp'));
-        }, RECONNECT_DELAY_MS);
+      if (qr) {
+        session.qr = await QRCode.toDataURL(qr);
+        session.status = 'qr';
       }
-    }
-  });
 
-  return getStatus(key);
+      if (connection === 'open') {
+        session.status = 'connected';
+        session.qr = null;
+      }
+
+      if (connection === 'close') {
+        const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const loggedOut = statusCode === DisconnectReason.loggedOut;
+
+        if (loggedOut) {
+          session.status = 'disconnected';
+          session.qr = null;
+          sessions.delete(key);
+          await clearAll();
+        } else {
+          // Reconexão automática (Seção 11): o Render free "dorme" e derruba a
+          // conexão do WhatsApp — reconecta sozinho ao acordar.
+          session.status = 'reconnecting';
+          session.timer = setTimeout(() => {
+            if (session.closed || sessions.get(key) !== session) return;
+            connect(companyId).catch((err) => logger.error({ err: err.message }, 'falha ao reconectar WhatsApp'));
+          }, RECONNECT_DELAY_MS);
+        }
+      }
+    };
+    sock.ev.on('connection.update', (update) => { connectionUpdate(update).catch((err) => logger.error({ err: err.message }, 'falha ao atualizar conexão')); });
+
+    return getStatus(key);
+  } catch (error) {
+    session.closed = true;
+    if (sessions.get(key) === session) sessions.delete(key);
+    throw error;
+  }
 }
 
 async function disconnect(companyId) {
   const key = String(companyId);
   const session = sessions.get(key);
+  if (session) { session.closed = true; if (session.timer) clearTimeout(session.timer); }
+  sessions.delete(key);
   if (session?.sock) {
     try {
       await session.sock.logout();

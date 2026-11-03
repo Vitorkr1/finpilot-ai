@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { api, setAccessToken, setRefreshEndpoint } from '../lib/api'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { api, setAccessToken } from '../lib/api'
 import type { Company, User } from '../lib/types'
 
 interface AuthContextValue {
@@ -16,26 +16,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [company, setCompany] = useState<Company | null>(null)
   const [loading, setLoading] = useState(true)
+  const epoch = useRef(0)
 
   useEffect(() => {
-    setRefreshEndpoint('/auth/refresh')
+    let active = true
+    const started = epoch.current
     ;(async () => {
       try {
         const { data } = await api.post('/auth/refresh')
+        if (!active || epoch.current !== started) return
         setAccessToken(data.accessToken)
         const me = await api.get('/auth/me')
+        if (!active || epoch.current !== started) return
         setUser(me.data.user)
         setCompany(me.data.company)
       } catch {
-        setAccessToken(null)
+        if (active && epoch.current === started) setAccessToken(null)
       } finally {
-        setLoading(false)
+        if (active) setLoading(false)
       }
     })()
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    const ended = () => { epoch.current++; setUser(null); setCompany(null) }
+    window.addEventListener('criaos:tenant-session-ended', ended)
+    return () => window.removeEventListener('criaos:tenant-session-ended', ended)
   }, [])
 
   async function login(email: string, password: string) {
-    setRefreshEndpoint('/auth/refresh')
+    epoch.current++
     const { data } = await api.post('/auth/login', { email, password })
     setAccessToken(data.accessToken)
     setUser(data.user)
@@ -43,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function logout() {
+    epoch.current++
     await api.post('/auth/logout')
     setAccessToken(null)
     setUser(null)

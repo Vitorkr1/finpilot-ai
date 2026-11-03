@@ -10,6 +10,7 @@ const items: {
   group: string
   pro?: boolean
   admin?: boolean
+  financial?: boolean
 }[] = [
   { to: '/', label: 'Visão geral', icon: 'grid', group: 'Workspace' },
   { to: '/clientes', label: 'Clientes', icon: 'users', group: 'Operação' },
@@ -21,7 +22,8 @@ const items: {
     group: 'Operação',
   },
   { to: '/agenda', label: 'Agenda', icon: 'calendar', group: 'Operação' },
-  { to: '/financeiro', label: 'Financeiro', icon: 'wallet', group: 'Gestão' },
+  { to: '/rotas', label: 'Equipe em rota', icon: 'pin', group: 'Operação' },
+  { to: '/financeiro', label: 'Financeiro', icon: 'wallet', group: 'Gestão', financial: true },
   { to: '/estoque', label: 'Estoque', icon: 'box', group: 'Gestão', pro: true },
   {
     to: '/usuarios',
@@ -58,7 +60,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const visible = items.filter(
     (i) =>
       (!i.pro || company?.plan === 'pro') &&
-      (!i.admin || user?.role === 'admin'),
+      (!i.admin || user?.role === 'admin') &&
+      (!i.financial || user?.role === 'admin' || user?.role === 'financeiro'),
   )
   const matches = visible.filter((i) =>
     i.label

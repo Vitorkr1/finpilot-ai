@@ -17,7 +17,9 @@ const currency = new Intl.NumberFormat('pt-BR', {
 })
 
 export function BudgetsPage() {
-  const { company } = useAuth()
+  const { company, user } = useAuth()
+  const management = user?.role === 'admin' || user?.role === 'financeiro'
+  const [pending, setPending] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState('todos')
   const [budgets, setBudgets] = useState<Budget[]>([])
   const [clients, setClients] = useState<Client[]>([])
@@ -85,13 +87,18 @@ export function BudgetsPage() {
   }
 
   async function updateStatus(id: string, status: BudgetStatus) {
-    await api.patch(`/budgets/${id}`, { status })
-    await loadData()
+    setPending(id); setError(null)
+    try { await api.patch(`/budgets/${id}`, { status }); await loadData() }
+    catch { setError('Não foi possível atualizar o orçamento. Atualize a página e tente novamente.') }
+    finally { setPending(null) }
   }
 
   async function convert(id: string) {
-    await api.post(`/budgets/${id}/convert`)
-    await loadData()
+    if (pending) return
+    setPending(id); setError(null)
+    try { await api.post(`/budgets/${id}/convert`); await loadData() }
+    catch { setError('Não foi possível converter. Confira se o orçamento foi aprovado e ainda não possui uma ordem de serviço.') }
+    finally { setPending(null) }
   }
 
   async function downloadPdf(id: string) {
@@ -312,7 +319,7 @@ export function BudgetsPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <select
                       value={b.status}
-                      disabled={b.convertedToServiceOrder}
+                      disabled={b.convertedToServiceOrder || pending === b._id}
                       onChange={(e) =>
                         updateStatus(b._id, e.target.value as BudgetStatus)
                       }
@@ -324,9 +331,10 @@ export function BudgetsPage() {
                         </option>
                       ))}
                     </select>
-                    {b.status === 'aprovado' && !b.convertedToServiceOrder && (
+                    {management && b.status === 'aprovado' && !b.convertedToServiceOrder && (
                       <button
-                        onClick={() => convert(b._id)}
+                        disabled={pending === b._id}
+                          onClick={() => convert(b._id)}
                         className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
                       >
                         Converter em OS

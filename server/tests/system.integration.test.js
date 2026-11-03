@@ -1,0 +1,300 @@
+const { test, before, after } = require('node:test');
+const assert = require('node:assert/strict');
+const mongoose = require('mongoose');
+const { MongoMemoryReplSet } = require('mongodb-memory-server');
+process.env.NODE_ENV = 'test';
+process.env.JWT_SECRET = 'test-only-access-secret-long-enough';
+process.env.JWT_REFRESH_SECRET = 'test-only-refresh-secret-long-enough';
+process.env.CLIENT_URL = 'http://localhost:5173';
+const User = require('../models/User');
+const Company = require('../models/Company');
+const AuthSession = require('../models/AuthSession');
+const Client = require('../models/Client');
+const Budget = require('../models/Budget');
+const ServiceOrder = require('../models/ServiceOrder');
+const StockItem = require('../models/StockItem');
+const RouteSession = require('../models/RouteSession');
+const { signAccessToken, signRefreshToken, hashToken } = require('../utils/tokens');
+let mongo, server, base, a, b, admin, finance, tech, other, superAdmin, client, foreignClient, order;
+const password = 'Test-password-42!';
+async function sessionFor(user) {
+  const s = new AuthSession({ userId:user._id, scope:user.role==='super_admin'?'admin':'tenant', expiresAt:new Date(Date.now()+86400000) });
+  const refresh=signRefreshToken(user,s._id);s.refreshHash=hashToken(refresh);await s.save();
+  return { token:signAccessToken(user,s._id), refresh, id:s._id };
+}
+async function call(method, path, actor, body, extra={}) {
+  const headers={ ...(actor ? { Authorization:'Bearer '+actor.token }: {}), ...extra };
+  if (body !== undefined && !(body instanceof FormData)) headers['Content-Type']='application/json';
+  const response=await fetch(base+'/api'+path,{method,headers,body:body===undefined?undefined:body instanceof FormData?body:JSON.stringify(body)});
+  let data=null;const type=response.headers.get('content-type')||'';
+  if (type.includes('application/json')) data=await response.json(); else if(type.includes('application/pdf')) data=Buffer.from(await response.arrayBuffer());
+  return {status:response.status,data,headers:response.headers};
+}
+async function createUser(company,role,email) {
+  const user=await User.create({companyId:company?company._id:null,name:role,email,passwordHash:await User.hashPassword(password),role});
+  return {...await sessionFor(user),user};
+}
+before(async()=>{
+  mongo=await MongoMemoryReplSet.create({replSet:{count:1,storageEngine:'wiredTiger'}});
+  await mongoose.connect(mongo.getUri());
+  const app=require('../app')();
+  await Promise.all(Object.values(mongoose.models).map(m=>m.init()));
+  a=await Company.create({name:'Empresa A',plan:'pro'});b=await Company.create({name:'Empresa B',plan:'pro'});
+  admin=await createUser(a,'admin','admin-a@example.com');finance=await createUser(a,'financeiro','finance-a@example.com');tech=await createUser(a,'tecnico','tech-a@example.com');other=await createUser(b,'admin','admin-b@example.com');superAdmin=await createUser(null,'super_admin','super@example.com');
+  client=await Client.create({companyId:a._id,name:'Cliente A'});foreignClient=await Client.create({companyId:b._id,name:'Cliente B'});
+  order=await ServiceOrder.create({companyId:a._id,clientId:client._id,technicianId:tech.user._id});
+  server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s))});base='http://127.0.0.1:'+server.address().port;
+});
+after(async()=>{if(server)await new Promise(resolve=>server.close(resolve));await mongoose.disconnect();if(mongo)await mongo.stop();});
+
+test('autenticação restaura super admin, normaliza e-mail e separa cookies',async()=>{
+  let r=await call('POST','/auth/login',null,{email:' ADMIN-A@EXAMPLE.COM ',password});assert.equal(r.status,200);assert.equal(r.data.user.role,'admin');assert.equal(r.data.user.passwordHash,undefined);
+  r=await call('POST','/auth/admin-refresh',null,undefined,{Cookie:'adminRefreshToken='+superAdmin.refresh});assert.equal(r.status,200);assert.equal(r.data.user.role,'super_admin');
+  r=await call('POST','/auth/refresh',null,undefined,{Cookie:'refreshToken='+superAdmin.refresh});assert.equal(r.status,401);
+  r=await call('POST','/auth/admin-refresh',null,undefined,{Cookie:'adminRefreshToken='+admin.refresh});assert.equal(r.status,401);
+  r=await call('POST','/auth/login',null,{email:{$ne:null},password});assert.equal(r.status,400);
+  r=await call('POST','/auth/login',null,{email:admin.user.email,password:'wrong'});assert.equal(r.status,401);
+  r=await call('GET','/clients',{token:admin.refresh});assert.equal(r.status,401);
+});
+test('logout revoga também JWT de acesso e preserva sessão do outro painel',async()=>{
+  const own=await sessionFor(admin.user);
+  const r=await call('POST','/auth/logout',null,undefined,{Cookie:'refreshToken='+own.refresh+'; adminRefreshToken='+superAdmin.refresh});assert.equal(r.status,204);
+  assert.equal((await call('GET','/clients',own)).status,401);
+  assert.equal((await call('POST','/auth/refresh',null,undefined,{Cookie:'refreshToken='+own.refresh})).status,401);
+  assert.equal((await call('POST','/auth/admin-refresh',null,undefined,{Cookie:'adminRefreshToken='+superAdmin.refresh})).status,200);
+  const set=r.headers.get('set-cookie');assert.ok(set.includes('refreshToken='));assert.ok(!set.includes('adminRefreshToken='));
+});
+test('perfis: financeiro protegido e super admin isolado da operação',async()=>{
+  for(const actor of [null,tech,superAdmin]) assert.equal((await call('GET','/financial-entries',actor)).status,actor?403:401);
+  const r=await call('POST','/financial-entries',finance,{type:'receita',description:'Serviço',amount:123.45,dueDate:'2026-11-03'});assert.equal(r.status,201);
+  assert.equal((await call('DELETE','/financial-entries/'+r.data._id,tech)).status,403);
+  assert.equal((await call('PATCH','/financial-entries/'+r.data._id+'/mark-paid',finance)).status,200);
+  assert.equal((await call('DELETE','/financial-entries/'+r.data._id,finance)).status,204);
+  assert.equal((await call('GET','/dashboard/summary',tech)).data.revenueThisMonth,null);
+  assert.equal((await call('GET','/clients',superAdmin)).status,403);
+});
+test('CRUD de clientes e isolamento entre empresas',async()=>{
+  const r=await call('POST','/clients',admin,{name:'  Teste  ',notes:'Observação',companyId:String(b._id)});assert.equal(r.status,201);assert.equal(r.data.companyId,String(a._id));assert.equal(r.data.name,'Teste');
+  assert.equal((await call('GET','/clients/'+r.data._id,other)).status,404);
+  assert.equal((await call('PATCH','/clients/'+r.data._id,other,{name:'Ataque'})).status,404);
+  assert.equal((await call('DELETE','/clients/'+r.data._id,other)).status,404);
+  assert.equal((await call('PATCH','/clients/'+r.data._id,admin,{name:'Atualizado'})).data.name,'Atualizado');
+  assert.equal((await call('GET','/clients/'+r.data._id+'/history',admin)).status,200);
+  assert.equal((await call('DELETE','/clients/'+r.data._id,admin)).status,204);
+});
+test('entrada inválida não causa 500 e filtros rejeitam operadores',async()=>{
+  for(const path of ['/clients','/budgets','/appointments','/stock-items','/financial-entries']) assert.equal((await call('POST',path,admin,{})).status,400,path);
+  assert.equal((await call('GET','/clients/invalid-id',admin)).status,400);
+  assert.equal((await call('GET','/financial-entries?type[$ne]=despesa',finance)).status,400);
+  assert.equal((await call('GET','/service-orders?technicianId[$ne]=x',admin)).status,400);
+  assert.equal((await call('POST','/clients',admin,{name:' '.repeat(5)})).status,400);
+});
+test('agenda valida horário, data e vínculos e limita técnico à própria agenda',async()=>{
+  const body={technicianId:String(tech.user._id),date:'2026-11-03',startTime:'09:00',endTime:'10:00',serviceOrderId:String(order._id)};
+  assert.equal((await call('POST','/appointments',tech,body)).status,403);
+  for(const bad of [{endTime:'08:00'},{date:'2026-02-30'},{startTime:'27:00'},{serviceOrderId:new mongoose.Types.ObjectId().toString()},{technicianId:String(admin.user._id)}]) assert.equal((await call('POST','/appointments',admin,{...body,...bad})).status,400);
+  const r=await call('POST','/appointments',admin,body);assert.equal(r.status,201);
+  assert.equal((await call('PATCH','/appointments/'+r.data._id,admin,{endTime:'08:00'})).status,400);
+  assert.equal((await call('PATCH','/appointments/'+r.data._id,admin,{endTime:'11:00'})).status,200);
+  const mine=await call('GET','/appointments?date=2026-11-03&technicianId='+admin.user._id,tech);assert.equal(mine.data.length,1);assert.equal(mine.data[0].technicianId,String(tech.user._id));
+  assert.equal((await call('DELETE','/appointments/'+r.data._id,other)).status,404);
+  assert.equal((await call('DELETE','/appointments/'+r.data._id,admin)).status,204);
+});
+test('financeiro rejeita OS de outra empresa, valores e datas inválidas',async()=>{
+  const foreign=await ServiceOrder.create({companyId:b._id,clientId:foreignClient._id});
+  const body={type:'despesa',description:'Teste',amount:10,dueDate:'2026-11-03'};
+  for(const bad of [{amount:-1},{amount:0.001},{dueDate:'2026-13-01'},{relatedServiceOrderId:String(foreign._id)}]) assert.equal((await call('POST','/financial-entries',finance,{...body,...bad})).status,400);
+});
+test('conversão concorrente cria uma única OS e mantém total monetário',async()=>{
+  const budget=await call('POST','/budgets',admin,{clientId:String(client._id),status:'aprovado',items:[{description:'Item',qty:3,unitPrice:0.1}]});assert.equal(budget.status,201);assert.equal(budget.data.total,0.3);
+  const r=await Promise.all([call('POST','/budgets/'+budget.data._id+'/convert',admin),call('POST','/budgets/'+budget.data._id+'/convert',admin)]);
+  assert.deepEqual(r.map(x=>x.status).sort(),[201,409]);assert.equal(await ServiceOrder.countDocuments({budgetId:budget.data._id}),1);
+  assert.equal((await call('GET','/budgets/'+budget.data._id+'/pdf',admin)).data.subarray(0,5).toString(),'%PDF-');
+});
+test('falha na criação da OS reverte a conversão do orçamento',async()=>{
+  const budget=await Budget.create({companyId:a._id,clientId:client._id,status:'aprovado'});
+  const original=ServiceOrder.create;ServiceOrder.create=async()=>{throw new Error('injected-order-failure')};
+  try {const r=await call('POST','/budgets/'+budget._id+'/convert',admin);assert.equal(r.status,500);assert.ok(!r.data.error.includes('injected'));}
+  finally {ServiceOrder.create=original;}
+  assert.equal((await Budget.findById(budget._id)).convertedToServiceOrder,false);
+});
+test('consumo concorrente não deixa estoque negativo nem perde material',async()=>{
+  const stock=await StockItem.create({companyId:a._id,name:'Cabo',quantity:3});
+  const r=await Promise.all([call('POST','/service-orders/'+order._id+'/materials',tech,{stockItemId:String(stock._id),qty:3}),call('POST','/service-orders/'+order._id+'/materials',tech,{stockItemId:String(stock._id),qty:3})]);
+  assert.deepEqual(r.map(x=>x.status).sort(),[201,409]);assert.equal((await StockItem.findById(stock._id)).quantity,0);
+  assert.equal((await ServiceOrder.findById(order._id)).materialsUsed.length,1);
+});
+test('falha ao registrar material reverte baixa no estoque',async()=>{
+  const stock=await StockItem.create({companyId:a._id,name:'Tubo',quantity:10});
+  const original=ServiceOrder.findOneAndUpdate;ServiceOrder.findOneAndUpdate=()=>{throw new Error('injected-material-failure')};
+  try {assert.equal((await call('POST','/service-orders/'+order._id+'/materials',tech,{stockItemId:String(stock._id),qty:2})).status,500);}
+  finally {ServiceOrder.findOneAndUpdate=original;}
+  assert.equal((await StockItem.findById(stock._id)).quantity,10);
+});
+test('técnico só atualiza suas ordens e não atribui outro técnico',async()=>{
+  const unassigned=await ServiceOrder.create({companyId:a._id,clientId:client._id});
+  assert.equal((await call('PATCH','/service-orders/'+unassigned._id,tech,{status:'concluida'})).status,404);
+  assert.equal((await call('PATCH','/service-orders/'+order._id,tech,{technicianId:String(admin.user._id)})).status,403);
+  assert.equal((await call('PATCH','/service-orders/'+order._id,tech,{status:'em_andamento'})).status,200);
+  assert.equal((await call('DELETE','/service-orders/'+order._id,tech)).status,403);
+});
+test('upload rejeita SVG e arquivo falso antes de chamar provedor',async()=>{
+  for(const [type,content] of [['image/svg+xml','<svg/>'],['image/png','not-an-image']]) {
+    const form=new FormData();form.append('photo',new Blob([content],{type}),'image');
+    assert.equal((await call('POST','/service-orders/'+order._id+'/photos',tech,form)).status,400);
+  }
+});
+test('cabeçalhos impedem cache e origem não autorizada',async()=>{
+  const r=await call('GET','/clients',admin);assert.equal(r.headers.get('cache-control'),'no-store');assert.ok(r.headers.get('content-security-policy').includes('https://res.cloudinary.com'));
+  assert.equal((await call('POST','/auth/logout',null,undefined,{Origin:'https://evil.example'})).status,403);
+  assert.equal((await call('GET','/clients',admin,undefined,{Origin:'http://localhost:5173'})).status,200);
+});
+test('criação de empresa falha sem deixar empresa órfã',async()=>{
+  const before=await Company.countDocuments();
+  assert.equal((await call('POST','/companies',superAdmin,{name:'Falha',email:admin.user.email})).status,409);
+  assert.equal(await Company.countDocuments(),before);
+  const r=await call('POST','/companies',superAdmin,{name:'Nova empresa',email:'new-admin@example.com'});assert.equal(r.status,201);assert.ok(r.data.tempPassword);assert.equal(r.data.adminUser.passwordHash,undefined);
+});
+test('limite de usuários vale também na reativação e impede bloquear o próprio admin',async()=>{
+  await Company.updateOne({_id:a._id},{$set:{plan:'basic'}});
+  try {
+    assert.equal((await call('POST','/company-users',admin,{name:'Extra',email:'extra@example.com',role:'tecnico'})).status,403);
+    assert.equal((await call('PATCH','/company-users/'+admin.user._id+'/active',admin,{active:false})).status,409);
+    const inactive=await User.create({companyId:a._id,name:'Inativo',email:'inactive@example.com',passwordHash:admin.user.passwordHash||'unused',role:'tecnico',active:false});
+    assert.equal((await call('PATCH','/company-users/'+inactive._id+'/active',admin,{active:true})).status,403);
+  } finally {await Company.updateOne({_id:a._id},{$set:{plan:'pro'}});}
+});
+test('rota Android exige consentimento, mantém apenas última posição e isola empresas',async()=>{
+  const token='b'.repeat(64),body={consent:true,deviceToken:token};
+  assert.equal((await call('POST','/route-tracking/mine',tech,{...body,consent:false})).status,400);
+  const started=await call('POST','/route-tracking/mine',tech,body);assert.equal(started.status,201);assert.equal(started.data.tokenHash,undefined);
+  assert.equal((await call('POST','/route-tracking/mine',tech,body)).status,200);
+  assert.equal((await call('POST','/route-tracking/mine',tech,{...body,deviceToken:'c'.repeat(64)})).status,409);
+  assert.equal((await call('GET','/route-tracking',tech)).status,403);
+  const pos={latitude:-8.05,longitude:-34.88,accuracy:10,capturedAt:new Date().toISOString()};
+  assert.equal((await call('PUT','/route-tracking/device/position',{token:'not-used'},pos,{Authorization:'Route '+token})).status,204);
+  const listed=await call('GET','/route-tracking',finance);assert.equal(listed.data.length,1);assert.equal(listed.data[0].position.latitude,pos.latitude);assert.equal(listed.data[0].tokenHash,undefined);
+  assert.deepEqual((await call('GET','/route-tracking',other)).data,[]);
+  for(const bad of [{latitude:91},{accuracy:-1},{capturedAt:new Date(Date.now()-180000).toISOString()}]) assert.equal((await call('PUT','/route-tracking/device/position',null,{...pos,...bad},{Authorization:'Route '+token})).status,400);
+  assert.equal((await call('DELETE','/route-tracking/device',null,undefined,{Authorization:'Route '+token})).status,204);
+  assert.equal((await call('PUT','/route-tracking/device/position',null,pos,{Authorization:'Route '+token})).status,410);
+  assert.equal(await RouteSession.countDocuments(),0);
+});
+test('rota expirada não aparece mesmo antes da limpeza TTL',async()=>{
+  await RouteSession.create({companyId:a._id,technicianId:tech.user._id,tokenHash:hashToken('d'.repeat(64)),startedAt:new Date(),consentAt:new Date(),expiresAt:new Date(Date.now()-1000)});
+  assert.deepEqual((await call('GET','/route-tracking',admin)).data,[]);
+  assert.equal((await call('GET','/route-tracking/mine',tech)).data,null);
+  await RouteSession.deleteMany({});
+});
+test('desativar técnico revoga sessões e interrompe a rota imediatamente',async()=>{
+  await call('POST','/route-tracking/mine',tech,{consent:true,deviceToken:'e'.repeat(64)});
+  assert.equal((await call('PATCH','/company-users/'+tech.user._id+'/active',admin,{active:false})).status,200);
+  assert.equal((await call('GET','/clients',tech)).status,401);assert.equal(await RouteSession.countDocuments({technicianId:tech.user._id}),0);
+  assert.equal((await call('PATCH','/company-users/'+tech.user._id+'/active',admin,{active:true})).status,200);
+  assert.equal((await call('GET','/clients',tech)).status,401);
+});
+test('estoque: CRUD e bloqueio de exclusão de material já consumido',async()=>{
+  const r=await call('POST','/stock-items',admin,{name:'Conector',quantity:8,minQuantity:2,unit:'un'});assert.equal(r.status,201);
+  assert.equal((await call('PATCH','/stock-items/'+r.data._id,other,{quantity:999})).status,404);
+  assert.equal((await call('PATCH','/stock-items/'+r.data._id,admin,{quantity:-1})).status,400);
+  assert.equal((await call('PATCH','/stock-items/'+r.data._id,admin,{quantity:6})).status,200);
+  assert.equal((await call('DELETE','/stock-items/'+r.data._id,admin)).status,204);
+  const used=await StockItem.findOne({name:'Cabo'});
+  assert.equal((await call('DELETE','/stock-items/'+used._id,admin)).status,409);
+});
+test('exclusões preservam histórico de cliente, orçamento e materiais',async()=>{
+  assert.equal((await call('DELETE','/clients/'+client._id,admin)).status,409);
+  const converted=await Budget.findOne({convertedToServiceOrder:true});
+  assert.equal((await call('DELETE','/budgets/'+converted._id,admin)).status,409);
+  assert.equal((await call('DELETE','/service-orders/'+order._id,admin)).status,409);
+});
+test('plano Basic bloqueia recursos Pro na API',async()=>{
+  await Company.updateOne({_id:a._id},{$set:{plan:'basic'}});
+  try {
+    assert.equal((await call('GET','/stock-items',admin)).status,403);
+    assert.equal((await call('POST','/ai/ask',admin,{question:'Teste'})).status,403);
+    assert.equal((await call('POST','/whatsapp/connect',admin)).status,403);
+    assert.equal((await call('GET','/financial-entries',finance)).status,200);
+  }finally{await Company.updateOne({_id:a._id},{$set:{plan:'pro'}});}
+});
+test('cadastro concorrente respeita último acesso disponível do plano',async()=>{
+  const c=await Company.create({name:'Limite concorrente',plan:'basic'});
+  const owner=await createUser(c,'admin','limit-admin@example.com');await createUser(c,'tecnico','limit-tech@example.com');
+  const r=await Promise.all([call('POST','/company-users',owner,{name:'Pessoa 1',email:'limit-1@example.com',role:'tecnico'}),call('POST','/company-users',owner,{name:'Pessoa 2',email:'limit-2@example.com',role:'tecnico'})]);
+  assert.deepEqual(r.map(x=>x.status).sort(),[201,403]);assert.equal(await User.countDocuments({companyId:c._id,active:true}),3);
+});
+test('lista de técnicos para financeiro não expõe e-mail nem hash de senha',async()=>{
+  const r=await call('GET','/company-users/technicians',finance);assert.equal(r.status,200);
+  for(const u of r.data){assert.equal(u.email,undefined);assert.equal(u.passwordHash,undefined);assert.ok(u.name);}
+  assert.equal((await call('GET','/company-users',finance)).status,403);
+});
+test('JSON malformado e payload grande são rejeitados com código correto',async()=>{
+  let r=await fetch(base+'/api/clients',{method:'POST',headers:{Authorization:'Bearer '+admin.token,'Content-Type':'application/json'},body:'{broken'});assert.equal(r.status,400);
+  r=await call('POST','/clients',admin,{name:'x'.repeat(140000)});assert.equal(r.status,413);
+});
+test('nova posição não pode ser substituída por amostra atrasada',async()=>{
+  const renewed=await sessionFor(tech.user),token='1'.repeat(64);
+  await call('POST','/route-tracking/mine',renewed,{consent:true,deviceToken:token});
+  const current=new Date(),pos={latitude:-8,longitude:-34,accuracy:5,capturedAt:current.toISOString()};
+  assert.equal((await call('PUT','/route-tracking/device/position',null,pos,{Authorization:'Route '+token})).status,204);
+  assert.equal((await call('PUT','/route-tracking/device/position',null,{...pos,latitude:-9,capturedAt:new Date(+current-1000).toISOString()},{Authorization:'Route '+token})).status,204);
+  assert.equal((await call('GET','/route-tracking',admin)).data[0].position.latitude,-8);
+  await call('DELETE','/route-tracking/mine',renewed);
+});
+test('suspensão revoga sessões e remove posições da empresa',async()=>{
+  const c=await Company.create({name:'Suspender',plan:'pro'});const owner=await createUser(c,'admin','suspend-admin@example.com');const t=await createUser(c,'tecnico','suspend-tech@example.com');
+  await call('POST','/route-tracking/mine',t,{consent:true,deviceToken:'2'.repeat(64)});
+  assert.equal((await call('PATCH','/companies/'+c._id+'/suspend',superAdmin)).status,200);
+  assert.equal((await call('GET','/clients',owner)).status,401);assert.equal(await RouteSession.countDocuments({companyId:c._id}),0);
+  assert.equal((await call('POST','/auth/refresh',null,undefined,{Cookie:'refreshToken='+owner.refresh})).status,401);
+});
+test('excluir empresa exige confirmação e limpa os dados do tenant',async()=>{
+  const c=await Company.create({name:'Excluir',plan:'pro'}),owner=await createUser(c,'admin','remove-admin@example.com');
+  await Client.create({companyId:c._id,name:'Removível'});
+  assert.equal((await call('DELETE','/companies/'+c._id,superAdmin,{})).status,400);
+  assert.equal((await call('DELETE','/companies/'+c._id,superAdmin,{confirm:true})).status,204);
+  assert.equal(await Client.countDocuments({companyId:c._id}),0);assert.equal(await User.countDocuments({companyId:c._id}),0);
+  assert.equal((await call('GET','/clients',owner)).status,401);
+});
+test('logout por Bearer revoga sessão mesmo sem cookie no cliente Android',async()=>{
+  const own=await sessionFor(admin.user);
+  assert.equal((await call('POST','/auth/logout',own)).status,204);
+  assert.equal((await call('GET','/clients',own)).status,401);
+});
+test('histórico e IA não expõem ordens de outro técnico por caminhos alternativos',async()=>{
+  const actor=await sessionFor(tech.user);const history=await call('GET','/clients/'+client._id+'/history',actor);assert.equal(history.status,200);
+  assert.ok(history.data.serviceOrders.every(s=>s.technicianId===String(tech.user._id)));
+  const ai=require('../services/ai'),original=ai.summarizeClientHistory;let inspected;
+  ai.summarizeClientHistory=async data=>{inspected=data;return 'Resumo de teste'};
+  try{assert.equal((await call('POST','/ai/client-summary/'+client._id,actor)).status,200);assert.ok(inspected.serviceOrders.every(s=>String(s.technicianId)===String(tech.user._id)));}
+  finally{ai.summarizeClientHistory=original;}
+});
+test('técnico consulta estoque, mas não altera saldo ou exclui itens arbitrariamente',async()=>{
+  const actor=await sessionFor(tech.user);assert.equal((await call('GET','/stock-items',actor)).status,200);
+  assert.equal((await call('POST','/stock-items',actor,{name:'Indevido',quantity:10})).status,403);
+  const item=await StockItem.findOne({companyId:a._id});
+  assert.equal((await call('PATCH','/stock-items/'+item._id,actor,{quantity:999})).status,403);
+  assert.equal((await call('DELETE','/stock-items/'+item._id,actor)).status,403);
+});
+test('exclusão concorrente com consumo não apaga histórico nem perde saldo',async()=>{
+  const o=await ServiceOrder.create({companyId:a._id,clientId:client._id});const stock=await StockItem.create({companyId:a._id,name:'Concorrente',quantity:1});
+  const results=await Promise.all([call('DELETE','/service-orders/'+o._id,admin),call('POST','/service-orders/'+o._id+'/materials',admin,{stockItemId:String(stock._id),qty:1})]);
+  if(results[0].status===204){assert.equal(results[1].status,404);assert.equal((await StockItem.findById(stock._id)).quantity,1);}
+  else{assert.equal(results[0].status,409);assert.equal(results[1].status,201);assert.equal((await ServiceOrder.findById(o._id)).materialsUsed.length,1);}
+});
+test('cliente não fica órfão quando criação de orçamento disputa com exclusão',async()=>{
+  const c=await Client.create({companyId:a._id,name:'Concorrente'});
+  const results=await Promise.all([call('DELETE','/clients/'+c._id,admin),call('POST','/budgets',admin,{clientId:String(c._id),items:[]})]);
+  if(results[0].status===204){assert.equal(results[1].status,400);assert.equal(await Budget.countDocuments({clientId:c._id}),0);}
+  else{assert.equal(results[0].status,409);assert.equal(results[1].status,201);assert.ok(await Client.findById(c._id));}
+});
+test('conversão de orçamento não permite que técnico contorne permissão de criar OS',async()=>{
+  const actor=await sessionFor(tech.user),budget=await Budget.create({companyId:a._id,clientId:client._id,status:'aprovado'});
+  assert.equal((await call('POST','/budgets/'+budget._id+'/convert',actor)).status,403);
+  assert.equal(await ServiceOrder.countDocuments({budgetId:budget._id}),0);
+});
+test('desativações concorrentes nunca deixam a empresa sem administrador',async()=>{
+  const c=await Company.create({name:'Admin concorrente',plan:'pro'}),one=await createUser(c,'admin','race-admin-1@example.com'),two=await createUser(c,'admin','race-admin-2@example.com');
+  const r=await Promise.all([call('PATCH','/company-users/'+two.user._id+'/active',one,{active:false}),call('PATCH','/company-users/'+one.user._id+'/active',two,{active:false})]);
+  assert.ok(r.some(x=>x.status===200));assert.ok(r.some(x=>x.status===401||x.status===409));assert.equal(await User.countDocuments({companyId:c._id,active:true,role:'admin'}),1);
+});

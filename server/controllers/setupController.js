@@ -89,6 +89,7 @@ const resetSuperAdminPassword = asyncHandler(async (req, res) => {
   user.passwordHash = await User.hashPassword(password);
   user.active = true;
   await user.save();
+  await require('../models/AuthSession').deleteMany({ userId: user._id });
 
   res.json({ message: `Senha do super admin ${email} sincronizada com SUPER_ADMIN_PASSWORD. Remova SETUP_TOKEN do ambiente agora.` });
 });

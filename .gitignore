@@ -6,3 +6,9 @@ node_modules/
 /server/public/
 *.log
 .DS_Store
+.android-tools/
+android/.gradle/
+android/local.properties
+android/**/build/
+*.jks
+*.keystore

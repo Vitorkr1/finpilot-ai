@@ -10,25 +10,27 @@ function startOfMonth() {
 const summary = asyncHandler(async (req, res) => {
   const companyId = req.user.companyId;
   const monthStart = startOfMonth();
+  const financial = req.user.role === 'admin' || req.user.role === 'financeiro';
+  const scope = { companyId, ...(req.user.role === 'tecnico' ? { technicianId: req.user._id } : {}) };
 
   const [openOrders, closedOrders, revenueAgg, expensesAgg] = await Promise.all([
-    ServiceOrder.countDocuments({ companyId, status: { $in: ['aberta', 'em_andamento'] } }),
-    ServiceOrder.countDocuments({ companyId, status: 'concluida' }),
-    FinancialEntry.aggregate([
+    ServiceOrder.countDocuments({ ...scope, status: { $in: ['aberta', 'em_andamento'] } }),
+    ServiceOrder.countDocuments({ ...scope, status: 'concluida' }),
+    financial ? FinancialEntry.aggregate([
       { $match: { companyId, type: 'receita', paidDate: { $gte: monthStart } } },
       { $group: { _id: null, total: { $sum: '$amount' } } },
-    ]),
-    FinancialEntry.aggregate([
+    ]) : Promise.resolve([]),
+    financial ? FinancialEntry.aggregate([
       { $match: { companyId, type: 'despesa', paidDate: { $gte: monthStart } } },
       { $group: { _id: null, total: { $sum: '$amount' } } },
-    ]),
+    ]) : Promise.resolve([]),
   ]);
 
   res.json({
     openServiceOrders: openOrders,
     closedServiceOrders: closedOrders,
-    revenueThisMonth: revenueAgg[0]?.total || 0,
-    expensesThisMonth: expensesAgg[0]?.total || 0,
+    revenueThisMonth: financial ? revenueAgg[0]?.total || 0 : null,
+    expensesThisMonth: financial ? expensesAgg[0]?.total || 0 : null,
   });
 });
 

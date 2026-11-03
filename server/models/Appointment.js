@@ -12,7 +12,7 @@ const appointmentSchema = new mongoose.Schema(
     endTime: { type: String, required: true },
     status: { type: String, enum: STATUSES, default: 'agendado' },
   },
-  { timestamps: true }
+  { timestamps: true, optimisticConcurrency: true }
 );
 
 appointmentSchema.index({ companyId: 1, technicianId: 1, date: 1 });

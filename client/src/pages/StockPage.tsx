@@ -1,10 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { useAuth } from '../context/AuthContext'
 import { AppLayout } from '../components/AppLayout'
 import { Icon } from '../components/Icon'
 import { api } from '../lib/api'
 import type { StockItem } from '../lib/types'
 
 export function StockPage() {
+  const { user } = useAuth()
+  const management = user?.role === 'admin' || user?.role === 'financeiro'
+  const [pending, setPending] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [lowOnly, setLowOnly] = useState(false)
   const [items, setItems] = useState<StockItem[]>([])
@@ -56,8 +60,10 @@ export function StockPage() {
 
   async function remove(id: string) {
     if (!confirm('Excluir este item?')) return
-    await api.delete(`/stock-items/${id}`)
-    await loadItems()
+    setPending(id); setError(null)
+    try { await api.delete(`/stock-items/${id}`); await loadItems() }
+    catch (err: unknown) { setError((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Não foi possível excluir o item.') }
+    finally { setPending(null) }
   }
 
   const lowCount = items.filter((i) => i.quantity <= i.minQuantity).length
@@ -75,7 +81,7 @@ export function StockPage() {
         decrementa a quantidade aqui automaticamente.
       </p>
 
-      <form
+      {management && <form
         onSubmit={handleSubmit}
         className="mb-8 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-5"
       >
@@ -142,7 +148,8 @@ export function StockPage() {
         >
           {submitting ? 'Salvando...' : 'Adicionar item'}
         </button>
-      </form>
+      </form>}
+      {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
 
       <div className="list-toolbar">
         <label className="list-search">
@@ -202,12 +209,13 @@ export function StockPage() {
                     )}
                   </td>
                   <td className="px-4 py-2 text-right">
-                    <button
+                    {management && <button
+                      disabled={pending === item._id}
                       onClick={() => remove(item._id)}
                       className="text-red-600 hover:underline"
                     >
                       Excluir
-                    </button>
+                    </button>}
                   </td>
                 </tr>
               ))}
