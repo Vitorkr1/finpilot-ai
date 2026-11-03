@@ -39,6 +39,6 @@ jobs:
       - run: ./gradlew testDebugUnitTest assembleDebug lintDebug --no-daemon
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: criaos-rotas-android-teste
+          name: criaos-android-teste
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14

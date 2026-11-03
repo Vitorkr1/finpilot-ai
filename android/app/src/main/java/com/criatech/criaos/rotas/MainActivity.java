@@ -33,7 +33,7 @@ public class MainActivity extends Activity {
         if (status != null && (current == null || !current.optBoolean("stopping"))) status.setText(RouteService.status);
         handler.postDelayed(this, 2000);
     }};
-    @Override public void onCreate(Bundle saved) { super.onCreate(saved); serverUrl = RouteStore.server(this); render(); }
+    @Override public void onCreate(Bundle saved) { super.onCreate(saved); serverUrl = getIntent().getStringExtra("server"); if(serverUrl==null) serverUrl=RouteStore.server(this); render(); }
     @Override public void onResume() {
         super.onResume();
         JSONObject saved = RouteStore.read(this);
@@ -101,6 +101,7 @@ public class MainActivity extends Activity {
     }
     private void loginForm() {
         EditText url=input("Endereço HTTPS do sistema",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI,serverUrl);
+        if(getIntent().getStringExtra("server")!=null) url.setEnabled(false);
         EditText email=input("E-mail",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,"");
         EditText pass=input("Senha",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD,"");
         button("Entrar",true,()->{
@@ -114,7 +115,10 @@ public class MainActivity extends Activity {
                 try{
                     Api.Response r=Api.request(target,"/auth/login","POST",null,new JSONObject().put("email",account).put("password",password));
                     if(!r.ok())throw new Exception(r.error());
-                    if(!"tecnico".equals(r.body.getJSONObject("user").optString("role")))throw new Exception("Use uma conta de técnico. Admin e financeiro acompanham pelo site.");
+                    if(!"tecnico".equals(r.body.getJSONObject("user").optString("role"))){
+                        Api.request(target,"/auth/logout","POST","Bearer "+r.body.getString("accessToken"),null);
+                        throw new Exception("Use uma conta de técnico nesta área. Admin e financeiro acessam o sistema na tela anterior do aplicativo.");
+                    }
                     String token=r.body.getString("accessToken"),who=r.body.getJSONObject("user").getString("name");
                     handler.post(()->{busy=false;accessToken=token;name=who;serverUrl=target;RouteStore.server(this,target);render();});
                 }catch(Exception e){handler.post(()->{busy=false;toast(e.getMessage()==null?"Falha na conexão. Confira o endereço e tente novamente.":e.getMessage());});}

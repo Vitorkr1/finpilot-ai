@@ -24,11 +24,19 @@ Os testes versionados cobrem: login, refresh, logout, perfis, tenant, CRUD, refe
 
 Verificações: `npm test`, `npm run build:client`, `npm run lint --workspace=client`, `npm audit --audit-level=low` e `./gradlew testDebugUnitTest assembleRelease lintRelease` com chave privada fora do repositório. Os alertas de lint de desenvolvimento React sobre exports/efeitos não indicam falha de build; estão separados de erros de compilação e das verificações de segurança.
 
-Resultado local: 14 testes do cliente, 46 do servidor e 2 do Android aprovados; compilação web e Android concluídas, APK de distribuição assinado e assinatura verificada. Auditoria de dependências sem vulnerabilidades conhecidas na data da revisão.
+Resultado da versão 1.0: 14 testes do cliente, 46 do servidor e 2 do Android aprovados; compilação web e Android concluídas, APK de distribuição assinado e assinatura verificada. Auditoria npm sem vulnerabilidades conhecidas na data da revisão.
 
 No navegador, usando dados temporários: login de administrador e técnico, criação de cliente e ordem com atribuição de técnico, mapa, encerramento de rota, bloqueio do financeiro para técnico e restauração da sessão do super admin após recarregar. A tela de rotas foi conferida em 1280 e 390 pixels de largura, sem transbordamento horizontal.
 
 ## Limites práticos
+
+### Atualização Android 1.1
+
+O aplicativo passa a abrir o sistema completo em WebView, mantendo a rota no serviço nativo. A navegação interna exige a mesma origem HTTPS. Arquivos locais, conteúdo misto, permissões de câmera/GPS pela página e cookies de terceiros são bloqueados. A única integração com a página salva PDF/CSV após o usuário escolher o destino; usa AndroidX WebKit com origem exata e checagem de página principal. Links externos exigem confirmação no aplicativo. O controle de acesso continua sendo aplicado pelo servidor.
+
+Testes adicionais cobrem a política de navegação, validação de arquivos e nomes, PDF/CSV, limite de tamanho, origem dos blobs, salvamentos concorrentes e reinjeção dos eventos de download. A análise estática verifica APIs do Android 8 ao Android 16. Os seletores de arquivos, a sessão web e o GPS ainda precisam de validação em aparelho real; os testes não simulam um telefone completo.
+
+Na versão 1.1, os 20 testes do cliente e 6 testes Android passaram localmente; a compilação de distribuição e o lint Android concluíram sem erros. O APK usa a mesma assinatura da versão 1.0. As regras da API não foram alteradas nesta atualização.
 
 A revisão não prova ausência de todas as vulnerabilidades. Não inclui teste de invasão externo, infraestrutura de produção, permissões/configuração do provedor ou validação com credenciais reais de WhatsApp, Groq e Cloudinary. A auditoria de pacotes considera somente os avisos conhecidos na data da execução.
 

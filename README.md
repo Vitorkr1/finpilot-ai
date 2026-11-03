@@ -25,7 +25,9 @@ O fluxo do GitHub Actions repete essas verificações e disponibiliza um APK de 
 
 ## Localização durante a rota
 
-O módulo **Equipe em rota** exibe posições somente para admin e financeiro da mesma empresa. O técnico vê apenas a própria rota e pode encerrá-la pelo site. No aplicativo Android, o técnico entra com sua conta, confirma o compartilhamento e escolhe **Iniciar rota**. O navegador pode ficar fechado; o serviço de localização usa uma notificação visível com a ação **Encerrar rota**.
+O aplicativo **CriaOS para Android 1.1** abre o sistema completo da empresa: clientes, orçamentos, ordens, agenda e os demais módulos autorizados para cada perfil. Na primeira abertura, informe a origem HTTPS do sistema publicado e entre com a mesma conta do site. É necessário acesso à internet; o aplicativo não instala a API nem o banco no celular.
+
+O botão **Minha rota**, na barra do aplicativo, abre a área nativa do técnico. Essa área solicita a autenticação do técnico separadamente da sessão do sistema, além da confirmação de compartilhamento. Admin e financeiro acompanham pelo módulo **Equipe em rota**, dentro do próprio aplicativo ou no site. O técnico vê apenas a própria rota e pode encerrá-la. O navegador pode ficar fechado; o serviço de localização usa uma notificação visível com a ação **Encerrar rota**.
 
 - Android 8 ou superior; conexão HTTPS obrigatória. Não há versão para iPhone.
 - Não inicia sozinho, não inicia ao reiniciar o celular e não solicita localização permanente fora da rota.
@@ -36,7 +38,11 @@ O módulo **Equipe em rota** exibe posições somente para admin e financeiro da
 - Desligar o celular, forçar a parada do app, revogar permissões ou restrições do fabricante podem interromper as atualizações. Para continuar, o técnico precisa abrir o app e retomar a rota explicitamente.
 - O app não comprova presença nem impede todas as formas de localização falsa. A precisão exibida deve ser considerada ao interpretar um ponto no mapa.
 
-Para instalar, distribua o APK assinado e informe o endereço HTTPS do próprio sistema. Esse endereço aparece no módulo **Minha rota**. Se quiser exibir um botão de download, configure `VITE_ANDROID_APK_URL` no build do site com uma URL HTTPS do APK hospedado por você.
+Para instalar, distribua o APK assinado e informe o endereço HTTPS do próprio sistema. Esse endereço aparece no módulo **Minha rota**. A versão 1.1 usa o mesmo identificador e assinatura da versão 1.0 de rotas; pode ser instalada como atualização. Se quiser exibir um botão de download no site, configure `VITE_ANDROID_APK_URL` no build com uma URL HTTPS do APK hospedado por você, inclusive em um serviço de compartilhamento de arquivos.
+
+Fotos são escolhidas pelo seletor de arquivos do Android, sem permissão geral de armazenamento. PDFs de orçamento e CSVs podem ser salvos no local escolhido pelo usuário, com limite de 16 MB. Mantenha o **Android System WebView atualizado**. Links para outros sites pedem confirmação e abrem no navegador. Certificados inválidos, conteúdo HTTP e navegação interna para outra origem são bloqueados. A comunicação para salvar documentos é restrita à origem configurada e à página principal; não expõe acesso geral ao celular.
+
+No menu **⋮**, use **Recarregar sistema**, **Abrir no navegador** ou **Trocar endereço do sistema**. Uma rota pendente/ativa impede trocar de empresa. A sessão web usa os cookies de autenticação do sistema; a senha não é gravada pelo aplicativo. Não há versões para Windows ou Linux neste projeto.
 
 ## Assinatura Android
 
