@@ -47,6 +47,108 @@ before(async()=>{
 });
 after(async()=>{if(server)await new Promise(resolve=>server.close(resolve));await mongoose.disconnect();if(mongo)await mongo.stop();});
 
+test('admin redefine senha da própria empresa, revoga sessões/rota e não armazena texto aberto',async()=>{
+  const c=await Company.create({name:'Redefinição',plan:'pro'});
+  const owner=await createUser(c,'admin','reset-owner@example.com');
+  const person=await createUser(c,'tecnico','reset-tech@example.com');
+  const second=await sessionFor(person.user),device='7'.repeat(64);
+  await call('POST','/route-tracking/mine',person,{consent:true,deviceToken:device});
+  const r=await call('POST','/company-users/'+person.user._id+'/reset-password',owner,{confirm:true,currentPassword:password});
+  assert.equal(r.status,200);assert.equal(r.data.selfReset,false);assert.match(r.data.tempPassword,/^[A-Za-z0-9_-]{16}$/);
+  assert.equal(r.headers.get('cache-control'),'no-store');assert.equal(r.data.user.passwordHash,undefined);
+  const stored=await User.findById(person.user._id).select('+passwordHash');
+  assert.notEqual(stored.passwordHash,r.data.tempPassword);assert.ok(await stored.comparePassword(r.data.tempPassword));assert.equal(await stored.comparePassword(password),false);
+  assert.equal(await AuthSession.countDocuments({userId:person.user._id}),0);
+  for(const actor of [person,second]) assert.equal((await call('GET','/clients',actor)).status,401);
+  assert.equal((await call('POST','/auth/refresh',null,undefined,{Cookie:'refreshToken='+person.refresh})).status,401);
+  assert.equal((await call('GET','/route-tracking/device',null,undefined,{Authorization:'Route '+device})).status,410);
+  assert.equal((await call('POST','/auth/login',null,{email:person.user.email,password})).status,401);
+  assert.equal((await call('POST','/auth/login',null,{email:person.user.email,password:r.data.tempPassword})).status,200);
+  const listed=await call('GET','/company-users',owner);assert.equal(listed.status,200);
+  for(const user of listed.data){assert.equal(user.passwordHash,undefined);assert.equal(user.tempPassword,undefined)}
+  const audit=await mongoose.model('AuditLog').findOne({entityId:person.user._id,action:'reset-password'}).lean();assert.ok(audit);
+  assert.ok(!JSON.stringify(audit).includes(r.data.tempPassword));
+});
+test('admin pode redefinir a própria senha e todos os acessos antigos deixam de funcionar',async()=>{
+  const c=await Company.create({name:'Própria senha',plan:'pro'}),owner=await createUser(c,'admin','reset-self@example.com');
+  const second=await sessionFor(owner.user);
+  const r=await call('POST','/company-users/'+owner.user._id+'/reset-password',owner,{confirm:true,currentPassword:password});
+  assert.equal(r.status,200);assert.equal(r.data.selfReset,true);assert.ok(r.data.tempPassword);
+  for(const actor of [owner,second]) assert.equal((await call('GET','/company-users',actor)).status,401);
+  assert.equal((await call('POST','/auth/refresh',null,undefined,{Cookie:'refreshToken='+owner.refresh})).status,401);
+  assert.equal((await call('POST','/auth/login',null,{email:owner.user.email,password:r.data.tempPassword})).status,200);
+  assert.equal((await call('POST','/auth/admin-refresh',null,undefined,{Cookie:'adminRefreshToken='+superAdmin.refresh})).status,200);
+});
+test('redefinição exige admin, confirmação e senha atual e não cruza empresas',async()=>{
+  const c=await Company.create({name:'Permissões de senha',plan:'pro'}),owner=await createUser(c,'admin','reset-permissions@example.com');
+  const target=await createUser(c,'tecnico','reset-protected@example.com'),url='/company-users/'+target.user._id+'/reset-password';
+  for(const actor of [null,finance,tech,superAdmin]) assert.equal((await call('POST',url,actor,{confirm:true,currentPassword:password})).status,actor?403:401);
+  assert.equal((await call('POST',url,other,{confirm:true,currentPassword:password})).status,404);
+  assert.equal((await call('POST','/company-users/'+new mongoose.Types.ObjectId()+'/reset-password',owner,{confirm:true,currentPassword:password})).status,404);
+  for(const body of [{currentPassword:password},{confirm:false,currentPassword:password},{confirm:true},{confirm:true,currentPassword:{$ne:null}},{confirm:true,currentPassword:password,password:'chosen-by-client'}]) assert.equal((await call('POST',url,owner,body)).status,400);
+  assert.equal((await call('POST',url,owner,{confirm:true,currentPassword:'wrong'})).status,403);
+  assert.ok(await (await User.findById(target.user._id).select('+passwordHash')).comparePassword(password));
+  assert.equal((await call('GET','/clients',target)).status,200);
+});
+test('redefinir usuário inativo não reativa seu acesso',async()=>{
+  const c=await Company.create({name:'Usuário inativo',plan:'pro'}),owner=await createUser(c,'admin','reset-inactive-owner@example.com'),target=await createUser(c,'tecnico','reset-inactive-person@example.com');
+  await User.updateOne({_id:target.user._id},{$set:{active:false}});
+  const r=await call('POST','/company-users/'+target.user._id+'/reset-password',owner,{confirm:true,currentPassword:password});
+  assert.equal(r.status,200);assert.equal(r.data.user.active,false);
+  assert.equal((await call('POST','/auth/login',null,{email:target.user.email,password:r.data.tempPassword})).status,401);
+});
+test('falha ao encerrar rota reverte senha e revogação de sessões juntas',async()=>{
+  const c=await Company.create({name:'Falha na troca',plan:'pro'}),owner=await createUser(c,'admin','reset-rollback-owner@example.com'),target=await createUser(c,'tecnico','reset-rollback-person@example.com');
+  const original=RouteSession.deleteMany;RouteSession.deleteMany=()=>{throw new Error('injected-password-reset-failure')};
+  try {
+    const r=await call('POST','/company-users/'+target.user._id+'/reset-password',owner,{confirm:true,currentPassword:password});
+    assert.equal(r.status,500);assert.equal(r.data.tempPassword,undefined);assert.ok(!r.data.error.includes('injected'));
+  } finally {RouteSession.deleteMany=original;}
+  assert.ok(await (await User.findById(target.user._id).select('+passwordHash')).comparePassword(password));
+  assert.equal((await call('GET','/clients',target)).status,200);
+});
+test('sessão do administrador revogada durante a confirmação impede a troca',async()=>{
+  const c=await Company.create({name:'Sessão revogada',plan:'pro'}),owner=await createUser(c,'admin','reset-revoked-owner@example.com'),target=await createUser(c,'tecnico','reset-revoked-person@example.com');
+  const original=User.hashPassword;
+  User.hashPassword=async value=>{const hash=await original(value);await AuthSession.deleteOne({_id:owner.id});return hash;};
+  try {assert.equal((await call('POST','/company-users/'+target.user._id+'/reset-password',owner,{confirm:true,currentPassword:password})).status,401);}
+  finally {User.hashPassword=original;}
+  assert.ok(await (await User.findById(target.user._id).select('+passwordHash')).comparePassword(password));
+});
+test('tentativas de redefinição têm limite por administrador',async()=>{
+  const c=await Company.create({name:'Limite de redefinições',plan:'pro'}),owner=await createUser(c,'admin','reset-limit@example.com');
+  const url='/company-users/'+owner.user._id+'/reset-password';
+  for(let i=0;i<10;i++) assert.equal((await call('POST',url,owner,{confirm:false,currentPassword:password})).status,400);
+  const r=await call('POST',url,owner,{confirm:true,currentPassword:password});assert.equal(r.status,429);assert.ok(r.data.error.includes('15 minutos'));
+  assert.ok(await (await User.findById(owner.user._id).select('+passwordHash')).comparePassword(password));
+});
+test('login iniciado com senha antiga não cria sessão depois da redefinição', {timeout:10000}, async()=>{
+  const c=await Company.create({name:'Login concorrente à troca',plan:'pro'}),owner=await createUser(c,'admin','reset-login-owner@example.com'),target=await createUser(c,'tecnico','reset-login-person@example.com');
+  const original=User.prototype.comparePassword;
+  let signal,release;
+  const verified=new Promise(resolve=>{signal=resolve}),resume=new Promise(resolve=>{release=resolve});
+  User.prototype.comparePassword=async function(value){const valid=await original.call(this,value);if(this.email===target.user.email){signal();await resume;}return valid;};
+  const login=call('POST','/auth/login',null,{email:target.user.email,password});
+  try {
+    await verified;
+    assert.equal((await call('POST','/company-users/'+target.user._id+'/reset-password',owner,{confirm:true,currentPassword:password})).status,200);
+    release();assert.equal((await login).status,401);assert.equal(await AuthSession.countDocuments({userId:target.user._id}),0);
+  }finally{release();User.prototype.comparePassword=original;await login;}
+});
+test('rota iniciada durante a troca não sobrevive à revogação da senha',async()=>{
+  const c=await Company.create({name:'Rota concorrente à troca',plan:'pro'}),owner=await createUser(c,'admin','reset-route-owner@example.com'),target=await createUser(c,'tecnico','reset-route-person@example.com');
+  const original=Company.findOneAndUpdate;let intercepted=false;
+  Company.findOneAndUpdate=async function(...args){
+    if(!intercepted && String(args[0]._id)===String(c._id)){
+      intercepted=true;
+      assert.equal((await call('POST','/company-users/'+target.user._id+'/reset-password',owner,{confirm:true,currentPassword:password})).status,200);
+    }
+    return original.apply(this,args);
+  };
+  try{assert.equal((await call('POST','/route-tracking/mine',target,{consent:true,deviceToken:'8'.repeat(64)})).status,401);assert.equal(await RouteSession.countDocuments({technicianId:target.user._id}),0);}
+  finally{Company.findOneAndUpdate=original;}
+});
+
 test('autenticação restaura super admin, normaliza e-mail e separa cookies',async()=>{
   let r=await call('POST','/auth/login',null,{email:' ADMIN-A@EXAMPLE.COM ',password});assert.equal(r.status,200);assert.equal(r.data.user.role,'admin');assert.equal(r.data.user.passwordHash,undefined);
   r=await call('POST','/auth/admin-refresh',null,undefined,{Cookie:'adminRefreshToken='+superAdmin.refresh});assert.equal(r.status,200);assert.equal(r.data.user.role,'super_admin');

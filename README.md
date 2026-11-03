@@ -46,6 +46,12 @@ Fotos são escolhidas pelo seletor de arquivos do Android, sem permissão geral 
 
 No menu **⋮**, use **Recarregar sistema**, **Abrir no navegador** ou **Trocar endereço do sistema**. Uma rota pendente/ativa impede trocar de empresa. A sessão web usa os cookies de autenticação do sistema; a senha não é gravada pelo aplicativo. Não há versões para Windows ou Linux neste projeto.
 
+## Redefinir senha de usuários
+
+Em **Equipe → Redefinir senha**, o admin pode gerar uma nova senha para qualquer usuário da própria empresa, inclusive sua conta. O aviso informa que a senha anterior, as sessões e a rota ativa do usuário serão encerradas. É necessário confirmar usando a senha atual do administrador.
+
+A nova senha aparece somente após a operação, com botão para copiar, sem armazenamento em texto aberto ou em logs. Fechar ou recarregar a tela elimina essa exibição; para obter outro acesso, gere outra senha. Ao redefinir a própria conta, copie antes de voltar ao login. Usuários inativos continuam inativos. A operação é limitada por administrador e não permite acessar usuários de outra empresa.
+
 ## Assinatura Android
 
 O projeto aceita `CRIAOS_KEYSTORE_FILE`, `CRIAOS_STORE_PASSWORD`, `CRIAOS_KEY_ALIAS` e `CRIAOS_KEY_PASSWORD` como variáveis de ambiente para `./gradlew assembleRelease`. Guarde a chave fora do Git: futuras atualizações precisam da mesma assinatura. O `.gitignore` exclui chaves, arquivos de ambiente e artefatos locais.

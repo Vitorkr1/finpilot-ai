@@ -1,4 +1,9 @@
 const RouteSession = require('../models/RouteSession');
+const User = require('../models/User');
+const Company = require('../models/Company');
+const AuthSession = require('../models/AuthSession');
+const transaction = require('../utils/transaction');
+const { httpError } = require('../utils/validation');
 const asyncHandler = require('../utils/asyncHandler');
 const { ROUTE_DURATION_MS, startSchema, hashToken, parsePosition, publicSession } = require('../services/routeTracking');
 
@@ -20,20 +25,22 @@ const start = asyncHandler(async (req, res) => {
   const now = new Date();
   const owner = { companyId: req.user.companyId, technicianId: req.user._id };
   const tokenHash = hashToken(parsed.data.deviceToken);
-  await RouteSession.deleteMany({ ...owner, expiresAt: { $lte: now } });
-  let session = await RouteSession.findOne(owner).select('+tokenHash');
-  if (session) {
-    if (session.tokenHash === tokenHash) return res.json(publicSession(session));
-    return res.status(409).json({ error: 'Você já tem uma rota ativa. Encerre a anterior antes de iniciar outra.' });
-  }
-  try {
-    session = await RouteSession.create({ ...owner, tokenHash, consentAt: now, startedAt: now, expiresAt: new Date(now.getTime() + ROUTE_DURATION_MS) });
-  } catch (error) {
-    if (error.code !== 11000) throw error;
-    session = await RouteSession.findOne({ ...owner, tokenHash, expiresAt: { $gt: now } });
-    if (!session) return res.status(409).json({ error: 'Você já tem uma rota ativa.' });
-  }
-  res.status(201).json(publicSession(session));
+  const result = await transaction(async (tx) => {
+    const company = await Company.findOneAndUpdate({ _id: owner.companyId, subscriptionStatus: { $ne: 'suspended' } }, { $inc: { userRevision: 1 } }, { session: tx });
+    if (!company) throw httpError(403, 'Compartilhamento interrompido. Entre novamente.');
+    const technician = await User.exists({ _id: req.user._id, companyId: owner.companyId, active: true, role: 'tecnico' }).session(tx);
+    const authenticated = await AuthSession.exists({ _id: req.authSession._id, userId: req.user._id, expiresAt: { $gt: new Date() } }).session(tx);
+    if (!technician || !authenticated) throw httpError(401, 'Seu acesso foi encerrado. Entre novamente.');
+    await RouteSession.deleteMany({ ...owner, expiresAt: { $lte: now } }).session(tx);
+    const existing = await RouteSession.findOne(owner).select('+tokenHash').session(tx);
+    if (existing) {
+      if (existing.tokenHash === tokenHash) return { session: existing, created: false };
+      throw httpError(409, 'Você já tem uma rota ativa. Encerre a anterior antes de iniciar outra.');
+    }
+    const [session] = await RouteSession.create([{ ...owner, tokenHash, consentAt: now, startedAt: now, expiresAt: new Date(now.getTime() + ROUTE_DURATION_MS) }], { session: tx });
+    return { session, created: true };
+  });
+  res.status(result.created ? 201 : 200).json(publicSession(result.session));
 });
 
 const updatePosition = asyncHandler(async (req, res) => {

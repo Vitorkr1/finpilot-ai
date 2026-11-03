@@ -6,6 +6,7 @@ const AuthSession = require('../models/AuthSession');
 const validation = require('../utils/validation');
 const asyncHandler = require('../utils/asyncHandler');
 const { logAction } = require('../services/audit');
+const transaction = require('../utils/transaction');
 
 const loginSchema = z.object({
   email: validation.email,
@@ -27,13 +28,24 @@ const COOKIE_OPTIONS = {
 };
 
 async function issueSession(user, res, cookieName) {
-  const session = new AuthSession({ userId: user._id, scope: cookieName === ADMIN_REFRESH_COOKIE ? 'admin' : 'tenant', expiresAt: new Date(Date.now() + COOKIE_OPTIONS.maxAge) });
-  const accessToken = signAccessToken(user, session._id);
-  const refreshToken = signRefreshToken(user, session._id);
-  session.refreshHash = hashToken(refreshToken);
-  await session.save();
-  res.cookie(cookieName, refreshToken, COOKIE_OPTIONS);
-  return accessToken;
+  const issued = await transaction(async (tx) => {
+    // A mesma trava de empresa da redefinição impede um login já em andamento
+    // de criar uma sessão com a senha antiga depois da troca.
+    if (user.companyId) {
+      const company = await Company.findOneAndUpdate({ _id: user.companyId, subscriptionStatus: { $ne: 'suspended' } }, { $inc: { userRevision: 1 } }, { session: tx });
+      if (!company) throw validation.httpError(403, 'Assinatura suspensa. Contate o suporte.');
+    }
+    const current = await User.findOne({ _id: user._id, active: true, passwordHash: user.passwordHash }).session(tx);
+    if (!current) throw validation.httpError(401, 'Seu acesso mudou. Entre novamente com a senha atual.');
+    const session = new AuthSession({ userId: user._id, scope: cookieName === ADMIN_REFRESH_COOKIE ? 'admin' : 'tenant', expiresAt: new Date(Date.now() + COOKIE_OPTIONS.maxAge) });
+    const accessToken = signAccessToken(current, session._id);
+    const refreshToken = signRefreshToken(current, session._id);
+    session.refreshHash = hashToken(refreshToken);
+    await session.save({ session: tx });
+    return { accessToken, refreshToken };
+  });
+  res.cookie(cookieName, issued.refreshToken, COOKIE_OPTIONS);
+  return issued.accessToken;
 }
 
 async function authenticate(email, password) {

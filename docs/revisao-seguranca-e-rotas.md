@@ -55,3 +55,11 @@ A revisão não prova ausência de todas as vulnerabilidades. Não inclui teste 
 A compilação e análise Android não substituem testes físicos. Antes da distribuição ampla, verificar em aparelhos reais: iniciar/encerrar, bloquear tela, fechar o navegador e a tela do app, ficar sem internet e reconectar, desligar GPS, negar/remover permissão, encerrar pelo aviso, forçar parada, reiniciar aparelho, completar 12 horas e encerrar pelo site. Restrições de bateria do fabricante podem interromper atualizações.
 
 O mapa usa OpenStreetMap com atribuição e política de referência compatíveis. O provedor pode impor limites ou bloquear requisições; para uso em escala, configure um provedor de mapas adequado à operação. Posições antigas e precisão reduzida são exibidas como tais.
+
+## Redefinição de senhas pelo administrador
+
+O admin da empresa pode redefinir a senha de outro usuário do mesmo tenant ou a própria senha. O formulário exibe o aviso antes da confirmação e exige a senha atual do ator. A API exige confirmação explícita, limita tentativas por administrador e revalida o ator e sua sessão na transação. Senha, revogação de sessões e remoção da rota são alteradas juntas; uma falha reverte as três operações. O registro de auditoria não inclui a senha, e as respostas têm cache desativado.
+
+A senha gerada é retornada apenas naquela resposta e mantida em memória na tela até ser fechada. O banco conserva somente o hash. Usuários inativos não são reativados. A própria conta recebe o resultado antes do retorno voluntário ao login, embora seus tokens anteriores já estejam revogados na API.
+
+Nove novos testes integrados cobrem troca efetiva, senha anterior inválida, próprio administrador, isolamento e perfis, confirmação e reautenticação, usuário inativo, reversão de falha, sessão revogada durante a operação, limite de tentativas, login e início de rota concorrentes à troca. Resultado: 23 testes do cliente e 60 do servidor aprovados, além do build web e análise estática sem erros. O Android não teve código alterado nesta atualização. Login e início de rota usam a mesma trava de empresa da redefinição, impedindo que uma requisição em andamento recrie o acesso revogado depois da troca.

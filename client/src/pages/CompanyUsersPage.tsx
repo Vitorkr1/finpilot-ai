@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { AppLayout } from '../components/AppLayout'
+import { ResetPasswordDialog } from '../components/ResetPasswordDialog'
+import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import type { Role, User } from '../lib/types'
 
@@ -10,6 +12,8 @@ const ROLE_LABEL: Record<string, string> = {
 }
 
 export function CompanyUsersPage() {
+  const { user } = useAuth()
+  const [resetTarget, setResetTarget] = useState<User | null>(null)
   const [users, setUsers] = useState<User[]>([])
   const [pending, setPending] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -129,6 +133,7 @@ export function CompanyUsersPage() {
         {error && <p className="sm:col-span-4 text-sm text-red-600">{error}</p>}
       </form>
 
+      <p className="team-password-note">As senhas atuais são protegidas. Para recuperar um acesso, use <strong>Redefinir senha</strong>. A nova senha substitui a anterior e aparece uma única vez para copiar.</p>
       {loading ? (
         <p className="text-sm text-slate-500">Carregando...</p>
       ) : users.length === 0 ? (
@@ -142,7 +147,7 @@ export function CompanyUsersPage() {
                 <th className="px-4 py-2">E-mail</th>
                 <th className="px-4 py-2">Função</th>
                 <th className="px-4 py-2">Status</th>
-                <th className="px-4 py-2" />
+                <th className="px-4 py-2 text-right">Acessos</th>
               </tr>
             </thead>
             <tbody>
@@ -163,13 +168,16 @@ export function CompanyUsersPage() {
                     </span>
                   </td>
                   <td className="px-4 py-2 text-right">
+                    <div className="team-user-actions">
+                    <button type="button" disabled={pending !== null} onClick={() => setResetTarget(u)} className="text-brand-600 hover:underline" aria-label={`Redefinir senha de ${u.name}`}>Redefinir senha</button>
                     <button
-                      disabled={pending === u._id}
+                      disabled={pending !== null || u._id === user?._id}
                       onClick={() => toggleActive(u)}
                       className="text-brand-600 hover:underline"
                     >
                       {u.active ? 'Desativar' : 'Ativar'}
                     </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -177,6 +185,7 @@ export function CompanyUsersPage() {
           </table>
         </div>
       )}
+      {resetTarget && <ResetPasswordDialog target={resetTarget} ownId={user?._id} onClose={() => setResetTarget(null)} />}
     </AppLayout>
   )
 }

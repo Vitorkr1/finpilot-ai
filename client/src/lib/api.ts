@@ -47,5 +47,9 @@ const tenant = createSessionApi('/auth/refresh', 'criaos:tenant-session-ended')
 const admin = createSessionApi('/auth/admin-refresh', 'criaos:admin-session-ended')
 export const api = tenant.api
 export const setAccessToken = tenant.setToken
+export function endTenantSession() {
+  tenant.setToken(null)
+  window.dispatchEvent(new Event('criaos:tenant-session-ended'))
+}
 export const adminApi = admin.api
 export const setAdminAccessToken = admin.setToken

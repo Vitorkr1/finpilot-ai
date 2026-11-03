@@ -73,4 +73,27 @@ const setActive = asyncHandler(async (req, res) => {
   res.json(user);
 });
 
-module.exports = { list, listTechnicians, create, setActive, USER_LIMIT_BY_PLAN };
+const resetPassword = asyncHandler(async (req, res) => {
+  const { currentPassword } = z.object({ confirm: z.literal(true), currentPassword: z.string().min(1).max(256) }).strict().parse(req.body);
+  const actor = await User.findOne({ _id: req.user._id, companyId: req.user.companyId, active: true, role: 'admin' }).select('+passwordHash');
+  if (!actor || !await actor.comparePassword(currentPassword)) throw v.httpError(403, 'Sua senha atual não confere. A senha do usuário não foi alterada.');
+  const tempPassword = crypto.randomBytes(12).toString('base64url');
+  const passwordHash = await User.hashPassword(tempPassword);
+  const user = await transaction(async (session) => {
+    const company = await Company.findOneAndUpdate({ _id: req.user.companyId }, { $inc: { userRevision: 1 } }, { new: true, session });
+    if (!company) throw v.httpError(404, 'Empresa não encontrada.');
+    // Revalida o ator e sua sessão dentro da mesma transação da troca.
+    const authorized = await User.exists({ _id: actor._id, companyId: company._id, active: true, role: 'admin', passwordHash: actor.passwordHash }).session(session);
+    const activeSession = await AuthSession.exists({ _id: req.authSession._id, userId: actor._id, expiresAt: { $gt: new Date() } }).session(session);
+    if (!authorized || !activeSession) throw v.httpError(401, 'Seu acesso foi encerrado. Entre novamente.');
+    const updated = await User.findOneAndUpdate({ _id: req.params.id, companyId: company._id }, { $set: { passwordHash } }, { new: true, runValidators: true, session });
+    if (!updated) throw v.httpError(404, 'Usuário não encontrado.');
+    await AuthSession.deleteMany({ userId: updated._id }).session(session);
+    await RouteSession.deleteMany({ companyId: company._id, technicianId: updated._id }).session(session);
+    return updated;
+  });
+  await logAction({ companyId: req.user.companyId, userId: req.user._id, action: 'reset-password', entity: 'User', entityId: user._id });
+  res.json({ user: user.toJSON(), tempPassword, selfReset: String(user._id) === String(req.user._id) });
+});
+
+module.exports = { list, listTechnicians, create, setActive, resetPassword, USER_LIMIT_BY_PLAN };
