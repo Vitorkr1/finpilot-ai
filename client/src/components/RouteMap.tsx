@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { RouteSession } from '../lib/routeTracking'
-import { positionStatus } from '../lib/routeTracking'
+import { canPlotPosition, positionStatus } from '../lib/routeTracking'
 
 export default function RouteMap({ sessions, selectedId, now }: { sessions: RouteSession[]; selectedId: string | null; now: number }) {
   const host = useRef<HTMLDivElement>(null)
@@ -29,18 +29,19 @@ export default function RouteMap({ sessions, selectedId, now }: { sessions: Rout
     const points: L.LatLngExpression[] = []
     for (const session of sessions) {
       const p = session.position
-      if (!p) continue
+      if (!canPlotPosition(p, now)) continue
       const latlng: L.LatLngExpression = [p.latitude, p.longitude]
       points.push(latlng)
       const status = positionStatus(p, now)
       const color = status.tone === 'recent' ? '#28765a' : '#b37925'
       const label = document.createElement('span')
-      label.textContent = `${session.technician?.name || 'Técnico'} · ${status.label}`
+      label.textContent = `${session.technician?.name || 'Técnico'} · ${status.label} · margem estimada ±${Math.ceil(p.accuracy)} m`
+      L.circle(latlng, { radius: p.accuracy, color, weight: 1, fillOpacity: 0.10 }).addTo(layer)
       L.circleMarker(latlng, { radius: session._id === selectedId ? 10 : 7, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 })
         .bindTooltip(label, { direction: 'top' }).addTo(layer)
       if (session._id === selectedId) {
-        L.circle(latlng, { radius: Math.max(p.accuracy, 5), color, weight: 1, fillOpacity: 0.08 }).addTo(layer)
         if (previousSelection.current !== selectedId) instance.setView(latlng, 15)
+        else if (!instance.getBounds().pad(-0.15).contains(L.latLng(p.latitude, p.longitude))) instance.panTo(latlng)
       }
     }
     if (!hadPositions.current && points.length && !selectedId) instance.fitBounds(L.latLngBounds(points), { padding: [50, 50], maxZoom: 15 })

@@ -38,13 +38,21 @@ const start = asyncHandler(async (req, res) => {
 
 const updatePosition = asyncHandler(async (req, res) => {
   const position = parsePosition(req.body);
-  if (!position) return res.status(400).json({ error: 'Posição inválida ou antiga. Confira a data e hora do celular.' });
+  if (!position) return res.status(400).json({ error: 'GPS sem precisão suficiente ou posição antiga. Use localização precisa e data e hora automáticas.' });
   // Atualização condicional impede uma amostra atrasada de substituir outra mais recente.
-  const result = await RouteSession.updateOne({
+  const filter = {
     _id: req.routeSession._id,
     expiresAt: { $gt: new Date() },
-    $or: [{ position: null }, { 'position.capturedAt': { $lt: position.capturedAt } }],
-  }, { $set: { position } });
+    $or: [{ position: null }, { 'position.capturedAt': { $lt: position.capturedAt } },
+      { 'position.capturedAt': position.capturedAt, 'position.accuracy': { $gt: position.accuracy } }],
+  };
+  if (position.provider === 'network') {
+    filter.$and = [{ $or: [
+      { 'position.provider': { $ne: 'gps' } },
+      { 'position.capturedAt': { $lte: new Date(position.capturedAt.getTime() - 10000) } },
+    ] }];
+  }
+  const result = await RouteSession.updateOne(filter, { $set: { position } });
   if (!result.matchedCount) {
     const active = await RouteSession.exists({ _id: req.routeSession._id, expiresAt: { $gt: new Date() } });
     if (!active) return res.status(410).json({ error: 'Rota encerrada ou expirada.' });
@@ -57,9 +65,13 @@ const stopDevice = asyncHandler(async (req, res) => {
   res.status(204).end();
 });
 
+const deviceStatus = asyncHandler(async (req, res) => {
+  res.json({ expiresAt: req.routeSession.expiresAt, protocolVersion: 2 });
+});
+
 const stopMine = asyncHandler(async (req, res) => {
   await RouteSession.deleteOne({ companyId: req.user.companyId, technicianId: req.user._id });
   res.status(204).end();
 });
 
-module.exports = { list, mine, start, updatePosition, stopDevice, stopMine };
+module.exports = { list, mine, start, updatePosition, stopDevice, stopMine, deviceStatus };

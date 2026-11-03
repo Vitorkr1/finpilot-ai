@@ -9,6 +9,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.*;
 import android.provider.Settings;
+import android.location.LocationManager;
 import android.text.InputType;
 import android.view.*;
 import android.widget.*;
@@ -128,17 +129,25 @@ public class MainActivity extends Activity {
     private Runnable afterPermission;
     private void permissions(Runnable action) {
         afterPermission=action;ArrayList<String> missing=new ArrayList<>();
-        if(checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)!=PackageManager.PERMISSION_GRANTED){missing.add(Manifest.permission.ACCESS_COARSE_LOCATION);missing.add(Manifest.permission.ACCESS_FINE_LOCATION);}
+        if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED){missing.add(Manifest.permission.ACCESS_COARSE_LOCATION);missing.add(Manifest.permission.ACCESS_FINE_LOCATION);}
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)missing.add(Manifest.permission.POST_NOTIFICATIONS);
         if(!missing.isEmpty()){requestPermissions(missing.toArray(new String[0]),10);return;}
+        LocationManager location=getSystemService(LocationManager.class);
+        boolean enabled=Build.VERSION.SDK_INT>=28?location.isLocationEnabled():location.isProviderEnabled(LocationManager.GPS_PROVIDER)||location.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+        if(!enabled){new AlertDialog.Builder(this).setTitle("Ative a localização do celular").setMessage("A rota precisa do GPS/localização ligado para obter uma posição confiável.").setNegativeButton("Voltar",null).setPositiveButton("Abrir configurações",(d,w)->startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))).show();return;}
         if(!getSystemService(NotificationManager.class).areNotificationsEnabled()){
             new AlertDialog.Builder(this).setTitle("Ative o aviso de rota").setMessage("O aviso permite ver e encerrar o compartilhamento mesmo com o aplicativo em segundo plano.").setNegativeButton("Voltar",null).setPositiveButton("Abrir configurações",(d,w)->startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,getPackageName()))).show();return;
         }
-        action.run();
+        if(action!=null)action.run();
     }
     @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){
         super.onRequestPermissionsResult(code,permissions,results);
-        if(code==10){if(checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED&&(Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED))permissions(afterPermission);else toast("Localização e aviso de rota precisam estar permitidos para iniciar.");}
+        if(code==10){
+            if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED){
+                new AlertDialog.Builder(this).setTitle("Permita a localização precisa").setMessage("Localização aproximada pode colocar o técnico em outra rua. Em Permissões → Localização, ative Usar localização precisa. Nenhuma rota será iniciada agora.").setNegativeButton("Voltar",null).setPositiveButton("Abrir permissões",(d,w)->startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,android.net.Uri.parse("package:"+getPackageName())))).show();
+            }else if(Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED)permissions(afterPermission);
+            else toast("Permita as notificações para ver e encerrar a rota em segundo plano.");
+        }
     }
     private void newRoute() {
         try{

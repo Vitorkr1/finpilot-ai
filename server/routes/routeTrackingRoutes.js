@@ -11,8 +11,11 @@ router.use((req, res, next) => {
   res.set('Cache-Control', 'no-store');
   next();
 });
-const deviceLimit = rateLimit({ windowMs: 60000, limit: 12, keyGenerator: (req) => String(req.routeSession._id), standardHeaders: 'draft-7', legacyHeaders: false });
+const deviceLimit = rateLimit({ windowMs: 60000, limit: 20, keyGenerator: (req) => String(req.routeSession._id), standardHeaders: 'draft-7', legacyHeaders: false,
+  handler: (_req, res) => res.status(429).json({ error: 'Muitas atualizações. Aguarde alguns segundos.' }),
+});
 router.put('/device/position', requireRouteDevice, deviceLimit, ctrl.updatePosition);
+router.get('/device', requireRouteDevice, deviceLimit, ctrl.deviceStatus);
 router.delete('/device', requireRouteDevice, ctrl.stopDevice);
 router.use(requireAuth, requireTenant, loadCompany);
 router.get('/', requireRole('admin', 'financeiro'), ctrl.list);

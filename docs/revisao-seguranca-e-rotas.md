@@ -38,6 +38,18 @@ Testes adicionais cobrem a política de navegação, validação de arquivos e n
 
 Na versão 1.1, os 20 testes do cliente e 6 testes Android passaram localmente; a compilação de distribuição e o lint Android concluíram sem erros. O APK usa a mesma assinatura da versão 1.0. As regras da API não foram alteradas nesta atualização.
 
+### Atualização Android, API e painel 1.2
+
+Correção do cenário em que a localização começava correta e depois saltava para uma rua próxima: o Android exige permissão precisa, solicita GPS a cada 2 segundos e não troca um GPS recente por uma leitura de rede. A política rejeita coordenadas inválidas, leituras com mais de 30 segundos, margem acima de 50 metros, amostras fora de ordem e saltos fisicamente improváveis. A prioridade do GPS também vale quando duas leituras têm o mesmo instante.
+
+O envio começa assim que há uma amostra utilizável e a API confirma o consentimento, com intervalo mínimo de 5 segundos. O painel consulta a cada 5 segundos enquanto visível, exibe segundos no horário e mantém o círculo de erro estimado visível. Leituras antigas permanecem identificadas como desatualizadas; leituras imprecisas de versões anteriores não são desenhadas no mapa. A API repete as validações de idade e precisão, protege o GPS recente contra substituição por rede e aceita melhoria de precisão no mesmo instante.
+
+Sem GPS utilizável, a consulta de estado do dispositivo permite detectar o encerramento pelo site sem enviar coordenadas. O contrato informa sua versão para preservar compatibilidade com a API anterior. A implantação completa exige atualizar APK, API e interface.
+
+Resultado local: **23 testes do cliente, 51 do servidor e 13 do Android aprovados (87 no total)**. Build web, APK de distribuição assinado e análise estática Android concluídos. Os testes cobrem a troca GPS/rede, leitura simultânea, qualidade, idade, movimento plausível, saltos, recuperação e encerramento remoto. A assinatura do APK 1.2 corresponde à distribuição anterior.
+
+No navegador, com banco temporário e dados fictícios, foram conferidos o mapa com margem de 20 metros, a ocultação da leitura de 500 metros, o horário atualizado e a ausência de transbordamento horizontal. Isso valida a apresentação e a comunicação simulada; **não substitui teste de campo com GPS real**. A versão 1.2 ainda precisa ser retestada no telefone usado pelo cliente, incluindo tela bloqueada e perda de sinal. Mesmo com estes filtros, GPS não garante erro zero nem comprova endereço exato; a estimativa de precisão pode estar errada.
+
 A revisão não prova ausência de todas as vulnerabilidades. Não inclui teste de invasão externo, infraestrutura de produção, permissões/configuração do provedor ou validação com credenciais reais de WhatsApp, Groq e Cloudinary. A auditoria de pacotes considera somente os avisos conhecidos na data da execução.
 
 A compilação e análise Android não substituem testes físicos. Antes da distribuição ampla, verificar em aparelhos reais: iniciar/encerrar, bloquear tela, fechar o navegador e a tela do app, ficar sem internet e reconectar, desligar GPS, negar/remover permissão, encerrar pelo aviso, forçar parada, reiniciar aparelho, completar 12 horas e encerrar pelo site. Restrições de bateria do fabricante podem interromper atualizações.

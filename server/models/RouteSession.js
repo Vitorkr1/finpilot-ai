@@ -12,6 +12,7 @@ const routeSessionSchema = new mongoose.Schema({
       latitude: { type: Number, required: true },
       longitude: { type: Number, required: true },
       accuracy: { type: Number, required: true },
+      provider: { type: String, enum: ['gps', 'network'] },
       capturedAt: { type: Date, required: true },
       receivedAt: { type: Date, required: true },
     }, { _id: false }),

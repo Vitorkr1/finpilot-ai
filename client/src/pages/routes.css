@@ -27,7 +27,7 @@
 .route-status { display: inline-flex; align-items: center; gap: 6px; border-radius: 4px; padding: 5px 8px; font-size: 10px; font-weight: 550; }
 .route-status::before { content: ''; height: 5px; width: 5px; border-radius: 50%; background: currentColor; }
 .route-status.recent { color: #28765a; background: #edf6f1; }
-.route-status.waiting { color: #8b712b; background: #faf5e9; }
+.route-status.waiting, .route-status.limited { color: #8b712b; background: #faf5e9; }
 .route-status.stale { color: #ad6626; background: #fff2e8; }
 .route-map-button { display: flex; gap: 8px; align-items: center; font-size: 11px; color: #4c61b8; margin-top: 15px; padding: 4px 0; }
 .route-map { height: 450px; width: 100%; background: #f0f3f5; z-index: 0; font-family: inherit; }

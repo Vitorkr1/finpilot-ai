@@ -298,3 +298,36 @@ test('desativações concorrentes nunca deixam a empresa sem administrador',asyn
   const r=await Promise.all([call('PATCH','/company-users/'+two.user._id+'/active',one,{active:false}),call('PATCH','/company-users/'+one.user._id+'/active',two,{active:false})]);
   assert.ok(r.some(x=>x.status===200));assert.ok(r.some(x=>x.status===401||x.status===409));assert.equal(await User.countDocuments({companyId:c._id,active:true,role:'admin'}),1);
 });
+
+test('GPS recente não é substituído pela rede e posições incertas nunca sobrescrevem a boa',async()=>{
+  const c=await Company.create({name:'Precisão de rota',plan:'pro'});
+  const owner=await createUser(c,'admin','gps-admin@example.com');
+  const technician=await createUser(c,'tecnico','gps-tech@example.com');
+  const token='7'.repeat(64),headers={Authorization:'Route '+token};
+  const start=await call('POST','/route-tracking/mine',technician,{consent:true,deviceToken:token});
+  assert.equal(start.status,201);assert.equal(start.data.protocolVersion,2);
+  const health=await call('GET','/route-tracking/device',null,undefined,headers);
+  assert.equal(health.status,200);assert.equal(health.data.protocolVersion,2);assert.equal(health.data.position,undefined);
+  const gps={latitude:-8.05,longitude:-34.88,accuracy:15,capturedAt:new Date(Date.now()-2000).toISOString(),provider:'gps'};
+  assert.equal((await call('PUT','/route-tracking/device/position',null,gps,headers)).status,204);
+  assert.equal((await call('PUT','/route-tracking/device/position',null,{...gps,accuracy:5},headers)).status,204);
+  const network={...gps,latitude:-8.0493,accuracy:20,capturedAt:new Date().toISOString(),provider:'network'};
+  assert.equal((await call('PUT','/route-tracking/device/position',null,network,headers)).status,204);
+  for(const accuracy of [0,51,500]) assert.equal((await call('PUT','/route-tracking/device/position',null,{...network,accuracy},headers)).status,400);
+  const listed=await call('GET','/route-tracking',owner);
+  assert.equal(listed.data[0].position.latitude,gps.latitude);assert.equal(listed.data[0].position.accuracy,5);assert.equal(listed.data[0].position.provider,'gps');
+  await call('DELETE','/route-tracking/mine',technician);
+  assert.equal((await call('GET','/route-tracking/device',null,undefined,headers)).status,410);
+});
+test('rede com boa precisão pode recuperar posição quando o GPS anterior perdeu o sinal',async()=>{
+  const c=await Company.create({name:'Recuperação de sinal',plan:'pro'});
+  const technician=await createUser(c,'tecnico','gps-recovery@example.com');
+  const token='8'.repeat(64),headers={Authorization:'Route '+token};
+  await call('POST','/route-tracking/mine',technician,{consent:true,deviceToken:token});
+  const gps={latitude:-8.05,longitude:-34.88,accuracy:10,capturedAt:new Date(Date.now()-15000).toISOString(),provider:'gps'};
+  await call('PUT','/route-tracking/device/position',null,gps,headers);
+  const network={...gps,latitude:-8.0499,accuracy:20,capturedAt:new Date().toISOString(),provider:'network'};
+  assert.equal((await call('PUT','/route-tracking/device/position',null,network,headers)).status,204);
+  const mine=await call('GET','/route-tracking/mine',technician);assert.equal(mine.data.position.latitude,network.latitude);
+  await call('DELETE','/route-tracking/mine',technician);
+});
