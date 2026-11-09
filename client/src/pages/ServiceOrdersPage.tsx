@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import { AppLayout } from '../components/AppLayout'
 import { ServiceOrderEditor } from '../components/ServiceOrderEditor'
 import { ServiceOrderRecord } from '../components/ServiceOrderRecord'
+import { DeleteServiceOrderDialog } from '../components/DeleteServiceOrderDialog'
 import { api } from '../lib/api'
 import { downloadCsv, localDateISO } from '../lib/format'
 import { deviceTimeZone, ORDER_STATUS as STATUS_LABEL, serviceOrderCsvRows, toIsoDateTime, toLocalDateTime } from '../lib/serviceOrders'
@@ -37,6 +38,7 @@ export function ServiceOrdersPage() {
   const [requestDescription, setRequestDescription] = useState('')
   const [editing, setEditing] = useState<{ order: ServiceOrder; initialStatus?: ServiceOrderStatus } | null>(null)
   const [success, setSuccess] = useState('')
+  const [deleting, setDeleting] = useState<ServiceOrder | null>(null)
   const visibleOrders = orders.filter(order => statusFilter === 'todos' || (statusFilter === 'pendencias' ? order.hasPending : order.status === statusFilter))
 
   async function loadData() {
@@ -273,7 +275,10 @@ export function ServiceOrdersPage() {
                   </div>
                 </div>
                 <ServiceOrderRecord order={order} />
-                <button type="button" className="secondary-button" disabled={pending !== null} onClick={() => void openEditor(order._id)}>Registrar atendimento</button>
+                <div className="os-order-actions">
+                  <button type="button" className="secondary-button" disabled={pending !== null} onClick={() => void openEditor(order._id)}>Registrar atendimento</button>
+                  {management && <button type="button" className="os-danger-outline" aria-label={`Excluir OS ${order._id.slice(-6).toUpperCase()}`} disabled={pending !== null} onClick={() => { setError(null); setSuccess(''); setDeleting(order) }}>Excluir OS</button>}
+                </div>
                 <h4 className="os-checklist-title">CHECKLIST</h4>
                 <ul className="mb-3 space-y-1">
                   {order.checklist.map((item, index) => (
@@ -329,6 +334,11 @@ export function ServiceOrdersPage() {
       {editing && <ServiceOrderEditor order={editing.order} initialStatus={editing.initialStatus} clientName={clientName(editing.order.clientId)} management={management} onClose={() => setEditing(null)} onSaved={updated => {
         setOrders(current => current.map(order => order._id === updated._id ? updated : order))
         setEditing(null); setSuccess('Atendimento salvo. As informações estão disponíveis na OS e no histórico do cliente.')
+      }} />}
+      {management && deleting && <DeleteServiceOrderDialog order={deleting} clientName={clientName(deleting.clientId)} onClose={() => setDeleting(null)} onDeleted={id => {
+        setOrders(current => current.filter(order => order._id !== id)); setDeleting(null); setSuccess('Ordem de serviço excluída.')
+      }} onCancelled={updated => {
+        setOrders(current => current.map(order => order._id === updated._id ? updated : order)); setDeleting(null); setSuccess('OS cancelada. O histórico e todos os vínculos foram preservados.')
       }} />}
     </AppLayout>
   )

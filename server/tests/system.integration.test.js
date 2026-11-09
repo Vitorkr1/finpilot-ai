@@ -108,6 +108,63 @@ test('OS antiga preserva a data original e continua aceitando checklist sem exig
   const updated=await call('PATCH',url,finance,{calledAt:'2026-10-01T09:00:00Z',serviceDescription:'Atendimento registrado depois',finishedAt:'2026-10-01T14:00:00Z'});assert.equal(updated.status,200);
 });
 
+test('exclusão de OS sem vínculos exige admin/financeiro e não cruza empresas',async()=>{
+  const own=await ServiceOrder.create({companyId:a._id,clientId:client._id,technicianId:tech.user._id});
+  const url='/service-orders/'+own._id;
+  for(const actor of [null,tech,superAdmin]){
+    assert.equal((await call('GET',url+'/deletion-check',actor)).status,actor?403:401);
+    assert.equal((await call('DELETE',url,actor)).status,actor?403:401);
+  }
+  assert.equal((await call('GET',url+'/deletion-check',other)).status,404);
+  assert.equal((await call('DELETE',url,other)).status,404);assert.ok(await ServiceOrder.exists({_id:own._id}));
+  assert.equal((await call('GET','/service-orders/invalid/deletion-check',admin)).status,400);
+  for(const actor of [admin,finance]){
+    const record=actor===admin?own:await ServiceOrder.create({companyId:a._id,clientId:client._id});
+    const path='/service-orders/'+record._id,check=await call('GET',path+'/deletion-check',actor);
+    assert.equal(check.status,200);assert.equal(check.headers.get('cache-control'),'no-store');assert.equal(check.data.canDelete,true);assert.deepEqual(check.data.reasons,[]);
+    assert.equal((await call('DELETE',path,actor)).status,204);assert.equal(await ServiceOrder.exists({_id:record._id}),null);
+    assert.equal((await call('DELETE',path,actor)).status,404);
+    assert.ok(await mongoose.model('AuditLog').exists({entityId:record._id,entity:'ServiceOrder',action:'delete'}));
+  }
+});
+test('materiais, agendamento e financeiro bloqueiam exclusão da OS e permitem cancelar sem perder vínculos',async()=>{
+  for(const kind of ['materials','appointments','financial']){
+    const record=await ServiceOrder.create({companyId:a._id,clientId:client._id,technicianId:tech.user._id});
+    const path='/service-orders/'+record._id;let related;
+    if(kind==='materials'){
+      related=await StockItem.create({companyId:a._id,name:'Material de teste de exclusão',quantity:5});
+      assert.equal((await call('POST',path+'/materials',admin,{stockItemId:String(related._id),qty:1})).status,201);
+    }else if(kind==='appointments'){
+      const r=await call('POST','/appointments',finance,{technicianId:String(tech.user._id),serviceOrderId:String(record._id),date:'2026-11-04',startTime:'09:00',endTime:'10:00'});assert.equal(r.status,201);related=r.data;
+    }else{
+      const r=await call('POST','/financial-entries',finance,{type:'receita',description:'Serviço vinculado',amount:100,dueDate:'2026-11-03',relatedServiceOrderId:String(record._id)});assert.equal(r.status,201);related=r.data;
+    }
+    const check=await call('GET',path+'/deletion-check',admin);assert.equal(check.status,200);assert.equal(check.data.canDelete,false);assert.equal(check.data.reasons.length,1);
+    const blocked=await call('DELETE',path,finance);assert.equal(blocked.status,409);assert.equal(blocked.data.code,'OS_HAS_LINKS');assert.equal(blocked.data.canDelete,false);assert.deepEqual(blocked.data.reasons,check.data.reasons);
+    const cancelled=await call('PATCH',path,finance,{status:'cancelada'});assert.equal(cancelled.status,200);assert.equal(cancelled.data.status,'cancelada');
+    assert.equal((await call('GET',path+'/deletion-check',admin)).data.status,'cancelada');assert.equal((await call('DELETE',path,admin)).status,409);
+    if(kind==='materials'){assert.equal((await StockItem.findById(related._id)).quantity,4);assert.equal((await ServiceOrder.findById(record._id)).materialsUsed.length,1);}
+    else assert.ok(await mongoose.model(kind==='appointments'?'Appointment':'FinancialEntry').exists({_id:related._id}));
+    assert.equal(await mongoose.model('AuditLog').countDocuments({entityId:record._id,entity:'ServiceOrder',action:'delete'}),0);
+  }
+});
+test('vínculo criado depois da conferência também impede excluir a OS',async()=>{
+  const record=await ServiceOrder.create({companyId:a._id,clientId:client._id}),path='/service-orders/'+record._id;
+  assert.equal((await call('GET',path+'/deletion-check',admin)).data.canDelete,true);
+  const entry=await call('POST','/financial-entries',finance,{type:'despesa',description:'Criado após a conferência',amount:20,dueDate:'2026-11-03',relatedServiceOrderId:String(record._id)});assert.equal(entry.status,201);
+  const blocked=await call('DELETE',path,admin);assert.equal(blocked.status,409);assert.equal(blocked.data.code,'OS_HAS_LINKS');assert.ok(blocked.data.reasons.includes('Lançamentos financeiros vinculados'));
+  assert.ok(await ServiceOrder.exists({_id:record._id}));assert.ok(await mongoose.model('FinancialEntry').exists({_id:entry.data._id}));
+});
+test('exclusão concorrente com agendamento ou financeiro não deixa vínculos órfãos',async()=>{
+  for(const type of ['appointments','financial-entries']){
+    const record=await ServiceOrder.create({companyId:a._id,clientId:client._id});
+    const body=type==='appointments'?{technicianId:String(tech.user._id),serviceOrderId:String(record._id),date:'2026-11-04',startTime:'10:00',endTime:'11:00'}:{type:'receita',description:'Vínculo concorrente',amount:50,dueDate:'2026-11-03',relatedServiceOrderId:String(record._id)};
+    const [removed,created]=await Promise.all([call('DELETE','/service-orders/'+record._id,admin),call('POST','/'+type,finance,body)]);
+    if(removed.status===204){assert.equal(created.status,400);assert.equal(await ServiceOrder.exists({_id:record._id}),null);}
+    else{assert.equal(removed.status,409);assert.equal(removed.data.code,'OS_HAS_LINKS');assert.equal(created.status,201);assert.ok(await ServiceOrder.exists({_id:record._id}));}
+  }
+});
+
 test('prévia de clientes não grava dados e confirmação importa somente linhas válidas',async()=>{
   const c=await Company.create({name:'Importação de clientes',plan:'basic'}),owner=await createUser(c,'admin','import-owner@example.com');
   await Client.create({companyId:c._id,name:'Já cadastrado',document:'012.345.678-90',phone:'999',notes:'Preservar'});

@@ -101,15 +101,36 @@ const update = asyncHandler(async (req, res) => {
   res.json(order);
 });
 
+async function deletionInfo(order, session = null) {
+  const financial = await require('../models/FinancialEntry').exists({ companyId: order.companyId, relatedServiceOrderId: order._id }).session(session);
+  const appointment = await require('../models/Appointment').exists({ companyId: order.companyId, serviceOrderId: order._id }).session(session);
+  const reasons = [];
+  if (order.materialsUsed?.length) reasons.push('Materiais usados');
+  if (appointment) reasons.push('Agendamentos vinculados');
+  if (financial) reasons.push('Lançamentos financeiros vinculados');
+  return { canDelete: reasons.length === 0, reasons, status: order.status };
+}
+
+const checkDeletion = asyncHandler(async (req, res) => {
+  const order = await ServiceOrder.findOne({ _id: req.params.id, companyId: req.user.companyId }).select('companyId status materialsUsed').lean();
+  if (!order) throw v.httpError(404, 'Ordem de serviço não encontrada.');
+  res.json(await deletionInfo(order));
+});
+
 const remove = asyncHandler(async (req, res) => {
-  const order = await transaction(async (session) => {
-    const order = await ServiceOrder.findOneAndDelete({ _id: req.params.id, companyId: req.user.companyId }).session(session);
-    if (!order) throw v.httpError(404, 'Ordem de serviço não encontrada.');
-    const financial = await require('../models/FinancialEntry').exists({ companyId: req.user.companyId, relatedServiceOrderId: order._id }).session(session);
-    const appointment = await require('../models/Appointment').exists({ companyId: req.user.companyId, serviceOrderId: order._id }).session(session);
-    if (order.materialsUsed.length || financial || appointment) throw v.httpError(409, 'Esta ordem possui materiais, agendamentos ou lançamentos. Cancele a ordem para preservar o histórico.');
-    return order;
-  });
+  let order;
+  try {
+    order = await transaction(async (session) => {
+      const order = await ServiceOrder.findOneAndDelete({ _id: req.params.id, companyId: req.user.companyId }).session(session);
+      if (!order) throw v.httpError(404, 'Ordem de serviço não encontrada.');
+      const info = await deletionInfo(order, session);
+      if (!info.canDelete) throw Object.assign(v.httpError(409, 'Esta OS possui vínculos e não pode ser excluída. Cancele a OS para preservar o histórico.'), { deletionInfo: info });
+      return order;
+    });
+  } catch (error) {
+    if (error.deletionInfo) return res.status(409).json({ error: error.message, code: 'OS_HAS_LINKS', ...error.deletionInfo });
+    throw error;
+  }
   await logAction({ companyId: req.user.companyId, userId: req.user._id, action: 'delete', entity: 'ServiceOrder', entityId: order._id });
   res.status(204).end();
 });
@@ -176,4 +197,4 @@ const setSignature = asyncHandler(async (req, res) => {
   res.status(201).json(order);
 });
 
-module.exports = { list, getOne, create, update, remove, checklistTemplate, addMaterial, addPhoto, setSignature };
+module.exports = { list, getOne, create, update, remove, checkDeletion, checklistTemplate, addMaterial, addPhoto, setSignature };

@@ -8,6 +8,7 @@ const {
   create,
   update,
   remove,
+  checkDeletion,
   checklistTemplate,
   addMaterial,
   addPhoto,
@@ -22,6 +23,7 @@ router.use(requireAuth, requireTenant, loadCompany);
 router.get('/', list);
 router.get('/checklist-template/:segment', requirePlan('pro'), checklistTemplate);
 router.get('/:id', getOne);
+router.get('/:id/deletion-check', requireRole('admin', 'financeiro'), checkDeletion);
 router.post('/', requireRole('admin', 'financeiro'), create);
 router.patch('/:id', update);
 router.delete('/:id', requireRole('admin', 'financeiro'), remove);
