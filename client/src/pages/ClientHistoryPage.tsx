@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { AppLayout } from '../components/AppLayout'
+import { ServiceOrderRecord } from '../components/ServiceOrderRecord'
+import { ORDER_STATUS } from '../lib/serviceOrders'
 import { api } from '../lib/api'
 import type { Budget, Client, ServiceOrder } from '../lib/types'
 
@@ -66,10 +68,9 @@ export function ClientHistoryPage() {
           ) : (
             <div className="space-y-2">
               {data.serviceOrders.map((so) => (
-                <div key={so._id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3 text-sm">
-                  <span>{new Date(so.createdAt).toLocaleDateString('pt-BR')}</span>
-                  <span className="capitalize text-slate-500">{so.segment}</span>
-                  <span className="capitalize text-slate-500">{so.status}</span>
+                <div key={so._id} className="os-card">
+                  <div className="flex flex-wrap justify-between gap-2 text-sm"><strong>OS {so._id.slice(-6).toUpperCase()}</strong><span>{ORDER_STATUS[so.status]}</span></div>
+                  <ServiceOrderRecord order={so} />
                 </div>
               ))}
             </div>

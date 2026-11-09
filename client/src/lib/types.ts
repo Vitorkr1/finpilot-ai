@@ -51,6 +51,7 @@ export interface Budget {
 }
 
 export type ServiceOrderStatus = 'aberta' | 'em_andamento' | 'concluida' | 'cancelada'
+export type PendingReason = 'material' | 'imprevisto' | 'retorno' | 'outro'
 
 export interface ChecklistItem {
   item: string
@@ -69,6 +70,15 @@ export interface ServiceOrder {
   laborHours: number
   status: ServiceOrderStatus
   createdAt: string
+  updatedAt?: string
+  calledAt?: string | null
+  requestDescription?: string
+  startedAt?: string | null
+  finishedAt?: string | null
+  serviceDescription?: string
+  hasPending?: boolean
+  pendingReason?: PendingReason | null
+  pendingNotes?: string
 }
 
 export type AppointmentStatus = 'agendado' | 'confirmado' | 'concluido' | 'cancelado'

@@ -49,6 +49,65 @@ before(async()=>{
 });
 after(async()=>{if(server)await new Promise(resolve=>server.close(resolve));await mongoose.disconnect();if(mongo)await mongo.stop();});
 
+test('chamado e execução da OS persistem e aparecem para financeiro, técnico e histórico',async()=>{
+  const r=await call('POST','/service-orders',finance,{clientId:String(client._id),technicianId:String(tech.user._id),calledAt:'2026-11-01T08:30:00-03:00',requestDescription:'  Verificar ar-condicionado  '});
+  assert.equal(r.status,201);assert.equal(r.data.calledAt,'2026-11-01T11:30:00.000Z');assert.equal(r.data.requestDescription,'Verificar ar-condicionado');
+  const url='/service-orders/'+r.data._id;
+  const updated=await call('PATCH',url,tech,{status:'em_andamento',startedAt:'2026-11-01T09:00:00-03:00',finishedAt:'2026-11-01T10:00:00-03:00',serviceDescription:'  Inspeção e limpeza realizadas.  ',hasPending:true,pendingReason:'material',pendingNotes:'  Falta sensor para concluir.  ',expectedUpdatedAt:r.data.updatedAt});
+  assert.equal(updated.status,200);assert.equal(updated.data.serviceDescription,'Inspeção e limpeza realizadas.');assert.equal(updated.data.pendingNotes,'Falta sensor para concluir.');
+  for(const actor of [admin,finance,tech]){const read=await call('GET',url,actor);assert.equal(read.status,200);assert.equal(read.data.hasPending,true);assert.equal(read.data.finishedAt,'2026-11-01T13:00:00.000Z');}
+  const history=await call('GET','/clients/'+client._id+'/history',tech);assert.equal(history.status,200);assert.equal(history.data.serviceOrders.find(o=>o._id===r.data._id).pendingReason,'material');
+  assert.equal((await call('PATCH',url,finance,{status:'concluida'})).status,400);
+  const resolved=await call('PATCH',url,tech,{hasPending:false,status:'concluida',serviceDescription:'Inspeção, limpeza e troca do sensor realizadas.'});assert.equal(resolved.status,200);assert.equal(resolved.data.pendingNotes,'Falta sensor para concluir.');assert.equal(resolved.data.hasPending,false);
+});
+test('novos registros da OS mantêm isolamento por empresa e atribuição ao técnico',async()=>{
+  const r=await call('POST','/service-orders',admin,{clientId:String(client._id),calledAt:'2026-11-01T08:00:00Z'});assert.equal(r.status,201);
+  const url='/service-orders/'+r.data._id;
+  assert.equal((await call('PATCH',url,tech,{serviceDescription:'Indevido'})).status,404);
+  assert.equal((await call('GET',url,other)).status,404);assert.equal((await call('PATCH',url,other,{hasPending:true,pendingReason:'material',pendingNotes:'Indevido'})).status,404);
+  assert.equal((await call('PATCH',url,null,{serviceDescription:'Indevido'})).status,401);assert.equal((await call('PATCH',url,superAdmin,{serviceDescription:'Indevido'})).status,403);
+  assert.equal((await call('PATCH',url,admin,{technicianId:String(tech.user._id)})).status,200);
+  for(const body of [{calledAt:'2026-11-01T07:00:00Z'},{requestDescription:'Alteração indevida'}]) assert.equal((await call('PATCH',url,tech,body)).status,403);
+  for(const body of [{companyId:String(b._id)},{serviceDescription:{$ne:null}},{hasPending:'true'},{pendingReason:'arbitrario'},{serviceDescription:'x'.repeat(8001)}]) assert.equal((await call('PATCH',url,admin,body)).status,400);
+});
+test('validação recusa datas inválidas, futuras e fora de sequência sem alterar a OS',async()=>{
+  const calledAt='2026-11-01T11:00:00Z',r=await call('POST','/service-orders',admin,{clientId:String(client._id),calledAt});assert.equal(r.status,201);
+  const url='/service-orders/'+r.data._id;
+  const invalid=[{startedAt:'2026-11-01T10:59:00Z'},{finishedAt:'2026-11-01T10:59:00Z'},{startedAt:'2026-11-01T12:00:00Z',finishedAt:'2026-11-01T11:59:00Z'},{calledAt:'2026-02-30T10:00:00Z'},{startedAt:'2026-11-01T12:00:00'},{finishedAt:'invalid'},{startedAt:new Date(Date.now()+3600000).toISOString()}];
+  for(const body of invalid) assert.equal((await call('PATCH',url,admin,body)).status,400,JSON.stringify(body));
+  assert.equal((await call('POST','/service-orders',admin,{clientId:String(client._id),calledAt:new Date(Date.now()+3600000).toISOString()})).status,400);
+  const unchanged=await call('GET',url,admin);assert.equal(unchanged.data.startedAt,null);assert.equal(unchanged.data.finishedAt,null);assert.equal(unchanged.data.calledAt,new Date(calledAt).toISOString());
+});
+test('OS exige descrição para concluir e motivo/detalhes para registrar pendência',async()=>{
+  const r=await call('POST','/service-orders',admin,{clientId:String(client._id)});assert.equal(r.status,201);assert.ok(r.data.calledAt);
+  const url='/service-orders/'+r.data._id;
+  for(const body of [{status:'concluida'},{hasPending:true},{hasPending:true,pendingReason:'imprevisto'},{hasPending:true,pendingNotes:'Sem acesso'},{status:'concluida',serviceDescription:'Feito',finishedAt:null},{status:'concluida',serviceDescription:'Feito',hasPending:true,pendingReason:'retorno',pendingNotes:'Retornar'}]) assert.equal((await call('PATCH',url,admin,body)).status,400);
+  const started=await call('PATCH',url,admin,{status:'em_andamento'});assert.equal(started.status,200);assert.ok(started.data.startedAt);
+  const done=await call('PATCH',url,admin,{status:'concluida',serviceDescription:'Teste realizado com sucesso'});assert.equal(done.status,200);assert.ok(done.data.finishedAt);
+});
+test('edição desatualizada não sobrescreve informações salvas por outra pessoa',async()=>{
+  const r=await call('POST','/service-orders',admin,{clientId:String(client._id),technicianId:String(tech.user._id)});assert.equal(r.status,201);
+  const url='/service-orders/'+r.data._id,stamp=r.data.updatedAt;
+  const first=await call('PATCH',url,tech,{serviceDescription:'Registrado pelo técnico',expectedUpdatedAt:stamp});assert.equal(first.status,200);
+  const conflict=await call('PATCH',url,finance,{serviceDescription:'Versão antiga',expectedUpdatedAt:stamp});assert.equal(conflict.status,409);
+  assert.equal((await call('GET',url,admin)).data.serviceDescription,'Registrado pelo técnico');
+  const original=ServiceOrder.findOneAndUpdate;let intercepted=false;
+  ServiceOrder.findOneAndUpdate=async function(...args){
+    if(!intercepted && String(args[0]._id)===r.data._id){intercepted=true;await ServiceOrder.updateOne({_id:r.data._id},{$set:{serviceDescription:'Alteração concorrente'},$inc:{__v:1}});}
+    return original.apply(this,args);
+  };
+  try{assert.equal((await call('PATCH',url,admin,{hasPending:true,pendingReason:'outro',pendingNotes:'Concorrência'})).status,409);}
+  finally{ServiceOrder.findOneAndUpdate=original;}
+  assert.equal((await call('GET',url,admin)).data.serviceDescription,'Alteração concorrente');
+});
+test('OS antiga preserva a data original e continua aceitando checklist sem exigir migração',async()=>{
+  const id=new mongoose.Types.ObjectId(),createdAt=new Date('2026-10-01T12:00:00Z');
+  await ServiceOrder.collection.insertOne({_id:id,companyId:a._id,clientId:client._id,status:'concluida',createdAt,updatedAt:createdAt,__v:0,checklist:[],photos:[],materialsUsed:[],laborHours:0});
+  const url='/service-orders/'+id,read=await call('GET',url,admin);assert.equal(read.status,200);assert.equal(read.data.calledAt,null);assert.equal(read.data.createdAt,createdAt.toISOString());
+  assert.equal((await call('PATCH',url,admin,{checklist:[{item:'Verificado',done:true}]})).status,200);
+  const updated=await call('PATCH',url,finance,{calledAt:'2026-10-01T09:00:00Z',serviceDescription:'Atendimento registrado depois',finishedAt:'2026-10-01T14:00:00Z'});assert.equal(updated.status,200);
+});
+
 test('prévia de clientes não grava dados e confirmação importa somente linhas válidas',async()=>{
   const c=await Company.create({name:'Importação de clientes',plan:'basic'}),owner=await createUser(c,'admin','import-owner@example.com');
   await Client.create({companyId:c._id,name:'Já cadastrado',document:'012.345.678-90',phone:'999',notes:'Preservar'});

@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { SEGMENTS } = require('./Company');
+const { PENDING_REASONS } = require('../services/serviceOrderData');
 
 const STATUSES = ['aberta', 'em_andamento', 'concluida', 'cancelada'];
 
@@ -29,6 +30,14 @@ const serviceOrderSchema = new mongoose.Schema(
     materialsUsed: { type: [materialUsedSchema], default: [] },
     laborHours: { type: Number, default: 0, min: 0 },
     status: { type: String, enum: STATUSES, default: 'aberta' },
+    calledAt: { type: Date, default: null },
+    requestDescription: { type: String, trim: true, maxlength: 4000, default: '' },
+    startedAt: { type: Date, default: null },
+    finishedAt: { type: Date, default: null },
+    serviceDescription: { type: String, trim: true, maxlength: 8000, default: '' },
+    hasPending: { type: Boolean, default: false },
+    pendingReason: { type: String, enum: PENDING_REASONS, default: null },
+    pendingNotes: { type: String, trim: true, maxlength: 4000, default: '' },
   },
   { timestamps: true }
 );

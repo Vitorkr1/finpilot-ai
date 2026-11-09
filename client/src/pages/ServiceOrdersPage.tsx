@@ -1,7 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { AppLayout } from '../components/AppLayout'
+import { ServiceOrderEditor } from '../components/ServiceOrderEditor'
+import { ServiceOrderRecord } from '../components/ServiceOrderRecord'
 import { api } from '../lib/api'
+import { downloadCsv, localDateISO } from '../lib/format'
+import { deviceTimeZone, ORDER_STATUS as STATUS_LABEL, serviceOrderCsvRows, toIsoDateTime, toLocalDateTime } from '../lib/serviceOrders'
 import type { Client, ServiceOrder, ServiceOrderStatus, User } from '../lib/types'
 
 const SEGMENTS = [
@@ -13,12 +17,7 @@ const SEGMENTS = [
   { value: 'outro', label: 'Outro' },
 ]
 
-const STATUS_LABEL: Record<ServiceOrderStatus, string> = {
-  aberta: 'Aberta',
-  em_andamento: 'Em andamento',
-  concluida: 'Concluída',
-  cancelada: 'Cancelada',
-}
+const errorText = (error: unknown, fallback: string) => (error as { response?: { data?: { error?: string } } })?.response?.data?.error || fallback
 
 export function ServiceOrdersPage() {
   const { user } = useAuth()
@@ -34,6 +33,11 @@ export function ServiceOrdersPage() {
   const [clientId, setClientId] = useState('')
   const [segment, setSegment] = useState('outro')
   const [submitting, setSubmitting] = useState(false)
+  const [calledAt, setCalledAt] = useState(() => toLocalDateTime(new Date().toISOString()))
+  const [requestDescription, setRequestDescription] = useState('')
+  const [editing, setEditing] = useState<{ order: ServiceOrder; initialStatus?: ServiceOrderStatus } | null>(null)
+  const [success, setSuccess] = useState('')
+  const visibleOrders = orders.filter(order => statusFilter === 'todos' || (statusFilter === 'pendencias' ? order.hasPending : order.status === statusFilter))
 
   async function loadData() {
     setLoading(true)
@@ -63,19 +67,31 @@ export function ServiceOrdersPage() {
     setSubmitting(true)
     setError(null)
     try {
-      await api.post('/service-orders', { clientId, segment, ...(technicianId ? { technicianId } : {}) })
+      await api.post('/service-orders', { clientId, segment, calledAt: toIsoDateTime(calledAt), requestDescription, ...(technicianId ? { technicianId } : {}) })
+      setRequestDescription(''); setCalledAt(toLocalDateTime(new Date().toISOString()))
+      setSuccess('OS aberta. Os detalhes do chamado já estão disponíveis para o técnico atribuído.')
       await loadData()
-    } catch {
-      setError('Não foi possível criar a ordem de serviço.')
+    } catch (err) {
+      setError(errorText(err, 'Não foi possível criar a ordem de serviço.'))
     } finally {
       setSubmitting(false)
     }
   }
 
   async function updateStatus(id: string, status: ServiceOrderStatus) {
+    if (status === 'concluida') { await openEditor(id, status); return }
     setPending(id); setError(null)
     try { await api.patch(`/service-orders/${id}`, { status }); await loadData() }
-    catch { setError('Não foi possível atualizar a ordem. Tente novamente.') }
+    catch (err) { setError(errorText(err, 'Não foi possível atualizar a ordem. Tente novamente.')) }
+    finally { setPending(null) }
+  }
+
+  async function openEditor(id: string, initialStatus?: ServiceOrderStatus) {
+    setPending(id); setError(null); setSuccess('')
+    try {
+      const { data } = await api.get<ServiceOrder>(`/service-orders/${id}`)
+      setEditing({ order: data, initialStatus })
+    } catch (err) { setError(errorText(err, 'Não foi possível carregar o atendimento.')) }
     finally { setPending(null) }
   }
 
@@ -115,13 +131,16 @@ export function ServiceOrdersPage() {
         Ordens de Serviço
       </h2>
       <p className="page-description">
-        Organize a execução, acompanhe os checklists e registre cada entrega.
+        Registre o chamado, o serviço realizado e o que precisa de retorno. Horários em {deviceTimeZone()}.
       </p>
 
       {management && <form
         onSubmit={handleSubmit}
-        className="mb-8 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3"
+        className="os-create"
       >
+        <h3>Abrir ordem de serviço</h3>
+        <div className="os-form-grid">
+        <label className="form-field"><span>Cliente *</span>
         <select
           required
           value={clientId}
@@ -137,6 +156,8 @@ export function ServiceOrdersPage() {
             </option>
           ))}
         </select>
+        </label>
+        <label className="form-field"><span>Tipo de serviço</span>
         <select
           value={segment}
           onChange={(e) => setSegment(e.target.value)}
@@ -148,10 +169,17 @@ export function ServiceOrdersPage() {
             </option>
           ))}
         </select>
+        </label>
+        <label className="form-field"><span>Técnico responsável</span>
         <select aria-label="Técnico responsável" value={technicianId} onChange={(e) => setTechnicianId(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
           <option value="">Sem técnico atribuído</option>
           {technicians.map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}
         </select>
+        </label>
+        <label className="form-field"><span>Data e hora do chamado *</span><input type="datetime-local" step="1" required value={calledAt} onChange={event => setCalledAt(event.target.value)} /><small>Informe quando o cliente fez a solicitação.</small></label>
+        <label className="form-field os-full"><span>Descrição do chamado</span><textarea rows={3} maxLength={4000} value={requestDescription} onChange={event => setRequestDescription(event.target.value)} placeholder="Ex.: ar-condicionado não está resfriando. Verificar a unidade da recepção." /></label>
+        </div>
+        <div className="os-create-actions">
         <button
           type="submit"
           disabled={submitting || !clientId}
@@ -159,9 +187,10 @@ export function ServiceOrdersPage() {
         >
           {submitting ? 'Abrindo...' : 'Abrir OS'}
         </button>
-        {error && <p className="sm:col-span-3 text-sm text-red-600">{error}</p>}
+        </div>
       </form>}
       {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
+      {success && <p role="status" className="os-success">{success}</p>}
 
       <div className="list-toolbar">
         <div className="filter-tabs" aria-label="Filtrar por status">
@@ -180,39 +209,39 @@ export function ServiceOrdersPage() {
               {label} ({orders.filter((item) => item.status === value).length})
             </button>
           ))}
+          <button aria-pressed={statusFilter === 'pendencias'} onClick={() => setStatusFilter('pendencias')}>Com pendências ({orders.filter(order => order.hasPending).length})</button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="secondary-button" disabled={loading || pending !== null} onClick={() => { setError(null); void loadData() }}>Atualizar lista</button>
+          {management && <button type="button" className="secondary-button" disabled={loading || !visibleOrders.length} onClick={() => downloadCsv(`ordens-de-servico-${localDateISO()}.csv`, serviceOrderCsvRows(visibleOrders, clients, technicians))}>Exportar para Excel (CSV)</button>}
         </div>
       </div>
       {loading ? (
         <p className="text-sm text-slate-500">Carregando...</p>
-      ) : orders.filter(
-          (item) => statusFilter === 'todos' || item.status === statusFilter,
-        ).length === 0 ? (
+      ) : visibleOrders.length === 0 ? (
         <p className="text-sm text-slate-500">
           Nenhuma ordem de serviço neste status.
         </p>
       ) : (
         <div className="space-y-3">
-          {orders
-            .filter(
-              (item) =>
-                statusFilter === 'todos' || item.status === statusFilter,
-            )
+          {visibleOrders
             .map((order) => (
               <div
                 key={order._id}
-                className="rounded-xl border border-slate-200 bg-white p-4"
+                className="os-card"
               >
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="os-card-head">
                   <div>
-                    <p className="font-medium text-slate-900">
+                    <h3>
                       {clientName(order.clientId)}
-                    </p>
-                    <p className="text-xs text-slate-500">
+                    </h3>
+                    <p className="os-card-id">OS {order._id.slice(-6).toUpperCase()} ·{' '}
                       {SEGMENTS.find((s) => s.value === order.segment)?.label} ·{' '}
                       {order.laborHours}h registradas
                     </p>
                   </div>
-                  {management && <select aria-label="Atribuir técnico à ordem" value={order.technicianId || ''} disabled={pending === order._id} onChange={async (e) => {
+                  <div className="os-card-controls">
+                  {management && <label>Técnico<select aria-label="Atribuir técnico à ordem" value={order.technicianId || ''} disabled={pending !== null} onChange={async (e) => {
                     setPending(order._id); setError(null)
                     try { await api.patch(`/service-orders/${order._id}`, { technicianId: e.target.value || null }); await loadData() }
                     catch { setError('Não foi possível atribuir o técnico.') }
@@ -220,10 +249,11 @@ export function ServiceOrdersPage() {
                   }} className="rounded-lg border border-slate-300 px-2 py-1 text-sm">
                     <option value="">Sem técnico atribuído</option>
                     {technicians.map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}
-                  </select>}
+                  </select></label>}
+                  <label>Status
                   <select
                     aria-label="Status da ordem"
-                    disabled={pending === order._id}
+                    disabled={pending !== null}
                     value={order.status}
                     onChange={(e) =>
                       updateStatus(
@@ -239,14 +269,19 @@ export function ServiceOrdersPage() {
                       </option>
                     ))}
                   </select>
+                  </label>
+                  </div>
                 </div>
+                <ServiceOrderRecord order={order} />
+                <button type="button" className="secondary-button" disabled={pending !== null} onClick={() => void openEditor(order._id)}>Registrar atendimento</button>
+                <h4 className="os-checklist-title">CHECKLIST</h4>
                 <ul className="mb-3 space-y-1">
                   {order.checklist.map((item, index) => (
                     <li key={index} className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
                         checked={item.done}
-                        disabled={pending === order._id}
+                        disabled={pending !== null}
                         onChange={() => toggleChecklistItem(order, index)}
                         className="h-4 w-4 rounded border-slate-300"
                       />
@@ -291,6 +326,10 @@ export function ServiceOrdersPage() {
             ))}
         </div>
       )}
+      {editing && <ServiceOrderEditor order={editing.order} initialStatus={editing.initialStatus} clientName={clientName(editing.order.clientId)} management={management} onClose={() => setEditing(null)} onSaved={updated => {
+        setOrders(current => current.map(order => order._id === updated._id ? updated : order))
+        setEditing(null); setSuccess('Atendimento salvo. As informações estão disponíveis na OS e no histórico do cliente.')
+      }} />}
     </AppLayout>
   )
 }

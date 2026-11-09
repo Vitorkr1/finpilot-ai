@@ -98,7 +98,7 @@ const convertToServiceOrder = asyncHandler(async (req, res) => {
     if (!client) throw v.httpError(409, 'O cliente deste orçamento não existe mais.');
     const [order] = await ServiceOrder.create([{
       companyId: req.user.companyId, clientId: budget.clientId, budgetId: budget._id,
-      status: 'aberta', checklist: getDefaultChecklist(),
+      status: 'aberta', checklist: getDefaultChecklist(), calledAt: new Date(),
     }], { session });
     return order;
   });

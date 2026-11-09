@@ -9,6 +9,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const { logAction } = require('../services/audit');
 const v = require('../utils/validation');
 const transaction = require('../utils/transaction');
+const { dateTime, openingFields, executionFields, validateAttendance, attendanceUpdate } = require('../services/serviceOrderData');
 
 const addMaterialSchema = z.object({
   stockItemId: v.objectId,
@@ -20,14 +21,18 @@ const createSchema = z.object({
   technicianId: v.objectId.optional(),
   segment: z.enum(['eletrica', 'solar', 'ar_condicionado', 'seguranca', 'manutencao', 'outro']).optional(),
   laborHours: v.quantity.optional(),
-});
+  ...openingFields,
+}).strict();
 
 const updateSchema = z.object({
   technicianId: v.objectId.nullable().optional(),
   status: z.enum(['aberta', 'em_andamento', 'concluida', 'cancelada']).optional(),
   laborHours: v.quantity.optional(),
   checklist: z.array(z.object({ item: v.name, done: z.boolean() })).max(200).optional(),
-});
+  ...openingFields,
+  ...executionFields,
+  expectedUpdatedAt: dateTime.optional(),
+}).strict().refine((data) => Object.keys(data).some((key) => key !== 'expectedUpdatedAt'));
 
 const list = asyncHandler(async (req, res) => {
   const filter = { companyId: req.user.companyId };
@@ -47,6 +52,8 @@ const getOne = asyncHandler(async (req, res) => {
 
 const create = asyncHandler(async (req, res) => {
   const data = createSchema.parse(req.body);
+  if (!data.calledAt) data.calledAt = new Date().toISOString();
+  validateAttendance(data);
 
   const client = await Client.findOne({ _id: data.clientId, companyId: req.user.companyId });
   if (!client) return res.status(400).json({ error: 'Cliente não encontrado nesta empresa' });
@@ -70,8 +77,14 @@ const create = asyncHandler(async (req, res) => {
 });
 
 const update = asyncHandler(async (req, res) => {
-  const data = updateSchema.parse(req.body);
-  if (req.user.role === 'tecnico' && ('technicianId' in data || 'laborHours' in data)) throw v.httpError(403, 'Técnicos podem atualizar apenas o andamento e o checklist das próprias ordens.');
+  const { expectedUpdatedAt, ...data } = updateSchema.parse(req.body);
+  if (req.user.role === 'tecnico' && ['technicianId', 'laborHours', 'calledAt', 'requestDescription'].some((key) => key in data)) throw v.httpError(403, 'Técnicos podem registrar a execução, o checklist e as pendências das próprias ordens. Os dados do chamado e a atribuição são alterados pela administração.');
+
+  const scope = { _id: req.params.id, companyId: req.user.companyId, ...(req.user.role === 'tecnico' ? { technicianId: req.user._id } : {}) };
+  const current = await ServiceOrder.findOne(scope).lean();
+  if (!current) return res.status(404).json({ error: 'Ordem de serviço não encontrada' });
+  if (expectedUpdatedAt && new Date(expectedUpdatedAt).getTime() !== current.updatedAt.getTime()) throw v.httpError(409, 'Esta OS foi alterada por outra pessoa. Feche o atendimento, atualize a lista e abra novamente para conferir os dados antes de salvar.');
+  const patch = attendanceUpdate(current, data);
 
   if (data.technicianId) {
     const tech = await User.findOne({ _id: data.technicianId, companyId: req.user.companyId, active: true, role: 'tecnico' });
@@ -79,11 +92,11 @@ const update = asyncHandler(async (req, res) => {
   }
 
   const order = await ServiceOrder.findOneAndUpdate(
-    { _id: req.params.id, companyId: req.user.companyId, ...(req.user.role === 'tecnico' ? { technicianId: req.user._id } : {}) },
-    data,
+    { ...scope, updatedAt: current.updatedAt, __v: current.__v },
+    { $set: patch, $inc: { __v: 1 } },
     { new: true, runValidators: true }
   );
-  if (!order) return res.status(404).json({ error: 'Ordem de serviço não encontrada' });
+  if (!order) throw v.httpError(409, 'Esta OS foi alterada durante o salvamento. Atualize a lista e confira os dados antes de tentar novamente.');
   await logAction({ companyId: req.user.companyId, userId: req.user._id, action: 'update', entity: 'ServiceOrder', entityId: order._id });
   res.json(order);
 });

@@ -1,0 +1,53 @@
+.os-create, .os-card { border: 1px solid #dfe5ee; border-radius: 12px; background: #fff; padding: 20px; }
+.os-create { margin-bottom: 26px; }
+.os-create h3 { font-size: 15px; font-weight: 600; margin-bottom: 16px; color: #25334a; }
+.os-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.os-form-grid .os-full { grid-column: 1 / -1; }
+.os-create .form-field, .os-editor .form-field { font-size: 12px; color: #58657a; }
+.os-create input, .os-create select, .os-create textarea, .os-editor input:not([type=checkbox]), .os-editor select, .os-editor textarea { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid #cbd4e2; border-radius: 7px; background: white; color: #26354c; font: inherit; font-size: 14px; }
+.os-create textarea, .os-editor textarea { resize: vertical; line-height: 1.6; }
+.os-create small, .os-editor small { font-size: 11px; color: #708099; }
+.os-create-actions, .os-editor-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: flex-end; margin-top: 20px; }
+.os-card + .os-card { margin-top: 16px; }
+.os-card-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.os-card-head h3 { font-weight: 600; color: #203047; font-size: 16px; }
+.os-card-id { font-size: 11px; color: #78859a; margin: 3px 0 0; }
+.os-card-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.os-card-controls select { max-width: 100%; border: 1px solid #cbd4e2; border-radius: 7px; padding: 8px; font-size: 12px; background: #fff; }
+.os-card-controls label { font-size: 11px; color: #65748b; display: flex; flex-direction: column; gap: 4px; }
+.os-record { margin: 16px 0; font-size: 13px; color: #46546b; }
+.os-dates { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px 0; border-top: 1px solid #edf0f5; border-bottom: 1px solid #edf0f5; }
+.os-dates dt { color: #718098; font-size: 11px; margin-bottom: 5px; }
+.os-dates dd { color: #324157; font-weight: 500; }
+.os-dates small { color: #7c899b; font-size: 10px; }
+.os-text { margin-top: 14px; }
+.os-text h4, .os-pending h4 { font-size: 12px; font-weight: 600; margin-bottom: 5px; }
+.os-text p, .os-pending p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+.os-pending { padding: 12px 14px; border-radius: 8px; margin-top: 14px; }
+.os-pending.is-open { background: #fff9ed; border-left: 3px solid #c28a27; color: #77551f; }
+.os-pending.is-resolved { background: #f5f8f7; border-left: 3px solid #90a69b; color: #53675b; }
+.os-checklist-title { font-size: 11px; color: #758199; margin: 18px 0 8px; font-weight: 600; }
+.os-editor { margin: auto; width: min(780px, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow-y: auto; border: 1px solid #dce2ec; border-radius: 14px; background: #fff; padding: 26px; color: #26354c; box-shadow: 0 24px 80px #10182830; }
+.os-editor::backdrop { background: #111b2d80; }
+.os-editor-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+.os-editor-heading h2 { font-size: 21px; font-weight: 600; }
+.os-editor-heading p { color: #718098; font-size: 12px; margin-top: 6px; }
+.os-editor fieldset { margin-top: 20px; border-top: 1px solid #e8edf4; padding-top: 18px; min-width: 0; }
+.os-editor legend { font-size: 13px; font-weight: 600; padding-right: 12px; }
+.os-editor input:disabled, .os-editor textarea:disabled { background: #f6f8fb; color: #6a7890; }
+.os-editor .os-pending-toggle { display: flex; gap: 10px; align-items: center; font-size: 13px; margin-bottom: 16px; }
+.os-pending-toggle input { width: 17px; height: 17px; }
+.os-editor-note { color: #758199; font-size: 12px; line-height: 1.6; margin: 12px 0; }
+.os-error { color: #b43838; background: #fff4f2; padding: 12px; border-radius: 8px; font-size: 13px; margin: 16px 0; }
+.os-success { color: #276346; background: #eff8f2; padding: 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
+.os-editor button:disabled, .os-create button:disabled { opacity: .55; cursor: not-allowed; }
+@media (max-width: 640px) {
+  .os-form-grid { grid-template-columns: 1fr; }
+  .os-dates { grid-template-columns: 1fr; gap: 14px; }
+  .os-create, .os-card { padding: 16px; }
+  .os-editor { padding: 20px 16px; }
+  .os-card-controls { width: 100%; }
+  .os-card-controls label { flex: 1; min-width: 130px; }
+  .os-editor-actions { flex-direction: column-reverse; }
+  .os-editor-actions button { justify-content: center; width: 100%; }
+}
