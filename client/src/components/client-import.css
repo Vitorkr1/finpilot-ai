@@ -1,0 +1,35 @@
+.client-import-dialog { margin: auto; width: min(1100px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 28px; border: 1px solid #dce2ec; border-radius: 16px; background: #fff; color: #243149; box-shadow: 0 24px 80px #10182830; }
+.client-import-dialog::backdrop { background: #111b2d80; }
+.client-import-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.client-import-heading p { margin: 0 0 8px; font-size: 10px; font-weight: 600; color: #718098; letter-spacing: .12em; }
+.client-import-heading h2 { margin: 0; font-size: 25px; font-weight: 650; }
+.client-import-dialog h3 { font-size: 15px; font-weight: 600; margin: 24px 0 15px; }
+.client-import-copy { max-width: 850px; color: #65738b; font-size: 13px; line-height: 1.7; margin: 16px 0 22px; }
+.client-import-file { display: flex; justify-content: space-between; gap: 20px; align-items: end; padding: 18px; border: 1px solid #e3e8f0; border-radius: 10px; background: #f8faff; }
+.client-import-file input { max-width: 100%; font-size: 13px; }
+.client-import-hint { color: #64728a; font-size: 12px; line-height: 1.65; margin: 12px 0 18px; overflow-wrap: anywhere; }
+.client-import-sheet { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; color: #52627d; font-size: 13px; margin-top: 20px; overflow-wrap: anywhere; }
+.client-import-sheet label { margin-left: auto; }
+.client-import-mapping { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+.client-import-dialog select { width: 100%; min-width: 0; padding: 10px; font-size: 13px; border: 1px solid #cbd4e2; border-radius: 8px; background: #fff; color: #253249; }
+.client-import-totals { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid #e1e7f0; border-radius: 10px; overflow: hidden; margin-top: 22px; }
+.client-import-totals div { display: grid; gap: 6px; padding: 18px; border-right: 1px solid #e1e7f0; }
+.client-import-totals div:last-child { border: 0; }
+.client-import-totals strong { font-size: 27px; font-weight: 600; }
+.client-import-totals span { font-size: 12px; color: #6b7890; }
+.client-import-table { overflow: auto; max-height: 360px; border: 1px solid #e1e7f0; border-radius: 9px; }
+.client-import-table table { width: 100%; text-align: left; font-size: 12px; border-collapse: collapse; }
+.client-import-table th { position: sticky; top: 0; background: #f5f7fc; z-index: 1; padding: 11px; color: #64728a; white-space: nowrap; }
+.client-import-table td { padding: 11px; border-top: 1px solid #e7ecf3; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
+.client-import-table td:last-child { max-width: 280px; min-width: 150px; white-space: normal; }
+.client-import-table td small { display: block; margin-top: 7px; color: #728097; font-size: 11px; line-height: 1.5; }
+.client-import-status { display: inline-block; padding: 3px 7px; border-radius: 4px; font-size: 11px; color: #28765a; background: #edf7f1; }
+.client-import-status.invalid { color: #ab3d3d; background: #fff1f1; }
+.client-import-status.duplicate { color: #856020; background: #fbf5e8; }
+.client-import-confirm { display: flex; align-items: flex-start; gap: 10px; margin: 22px 0; font-size: 13px; line-height: 1.6; }
+.client-import-confirm input { margin-top: 4px; }
+.client-import-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.client-import-dialog button:disabled { cursor: not-allowed; opacity: .55; }
+.client-import-error { font-size: 13px; color: #b34040; line-height: 1.6; margin-top: 18px; }
+.clients-heading { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; }
+@media (max-width: 700px) { .client-import-dialog { padding: 20px 16px; } .client-import-mapping { grid-template-columns: repeat(2, minmax(0, 1fr)); } .client-import-file { flex-direction: column; align-items: stretch; } .client-import-actions { flex-direction: column; } .client-import-actions button { justify-content: center; } .client-import-totals div { padding: 12px 9px; } .client-import-totals span { font-size: 10px; } }

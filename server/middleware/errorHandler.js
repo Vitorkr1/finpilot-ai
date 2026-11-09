@@ -12,6 +12,7 @@ function errorHandler(err, req, res, next) {
   if (err.name === 'VersionError') return res.status(409).json({ error: 'Este registro foi alterado por outra pessoa. Atualize a página e tente novamente.' });
   if (err.name === 'MulterError') return res.status(err.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'A imagem deve ter até 8 MB.' : 'Envio de arquivo inválido.' });
   if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'JSON inválido.' });
+  if (err.type === 'entity.too.large') return res.status(413).json({ error: 'Os dados enviados são grandes demais. Reduza o conteúdo ou divida a importação em arquivos menores.' });
   // Erro de chave duplicada do MongoDB (ex.: e-mail já cadastrado) — nunca
   // deve vazar como 500 cru, é um erro de validação de quem está preenchendo.
   if (err.code === 11000) {

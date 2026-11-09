@@ -39,6 +39,11 @@ export function ClientHistoryPage() {
           <p className="mb-6 text-sm text-slate-500">
             {data.client.phone || 'Sem telefone'} · {data.client.document || 'Sem documento'}
           </p>
+          {(data.client.email || data.client.address || data.client.notes) && <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 space-y-2">
+            {data.client.email && <p><strong>E-mail:</strong> {data.client.email}</p>}
+            {data.client.address && <p><strong>Endereço:</strong> {data.client.address}</p>}
+            {data.client.notes && <p className="whitespace-pre-wrap break-words"><strong>Observações:</strong> {data.client.notes}</p>}
+          </div>}
 
           <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Orçamentos</h3>
           {data.budgets.length === 0 ? (

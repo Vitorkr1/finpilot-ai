@@ -14,6 +14,8 @@ const Budget = require('../models/Budget');
 const ServiceOrder = require('../models/ServiceOrder');
 const StockItem = require('../models/StockItem');
 const RouteSession = require('../models/RouteSession');
+const ClientImport = require('../models/ClientImport');
+const { randomUUID } = require('node:crypto');
 const { signAccessToken, signRefreshToken, hashToken } = require('../utils/tokens');
 let mongo, server, base, a, b, admin, finance, tech, other, superAdmin, client, foreignClient, order;
 const password = 'Test-password-42!';
@@ -46,6 +48,60 @@ before(async()=>{
   server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s))});base='http://127.0.0.1:'+server.address().port;
 });
 after(async()=>{if(server)await new Promise(resolve=>server.close(resolve));await mongoose.disconnect();if(mongo)await mongo.stop();});
+
+test('prévia de clientes não grava dados e confirmação importa somente linhas válidas',async()=>{
+  const c=await Company.create({name:'Importação de clientes',plan:'basic'}),owner=await createUser(c,'admin','import-owner@example.com');
+  await Client.create({companyId:c._id,name:'Já cadastrado',document:'012.345.678-90',phone:'999',notes:'Preservar'});
+  const rows=[{row:2,data:{name:'Novo cliente',phone:'000123',email:' NOVO@EXAMPLE.COM ',address:'Rua A',notes:'Observação'}},{row:3,data:{name:'Outro nome',document:'01234567890'}},{row:4,data:{name:''}},{row:5,data:{name:'Novo cliente',phone:'000123',email:'novo@example.com'}}];
+  const p=await call('POST','/clients/import/preview',owner,{rows});assert.equal(p.status,200);assert.equal(p.data.ready,1);assert.equal(p.data.duplicates,2);assert.equal(p.data.invalid,1);assert.equal(await Client.countDocuments({companyId:c._id}),1);
+  assert.equal((await call('POST','/clients/import',owner,{rows,requestId:randomUUID()})).status,400);
+  const body={rows,requestId:randomUUID(),confirm:true},r=await call('POST','/clients/import',owner,body);assert.equal(r.status,200);assert.equal(r.data.imported,1);assert.equal(r.headers.get('cache-control'),'no-store');
+  const added=await Client.findOne({companyId:c._id,name:'Novo cliente'});assert.equal(added.phone,'000123');assert.equal(added.email,'novo@example.com');assert.equal(added.notes,'Observação');
+  assert.equal((await Client.findOne({companyId:c._id,document:'012.345.678-90'})).notes,'Preservar');
+  const replay=await call('POST','/clients/import',owner,body);assert.equal(replay.status,200);assert.equal(replay.data.imported,1);assert.equal(replay.data.replayed,true);assert.equal(await Client.countDocuments({companyId:c._id}),2);
+  assert.equal((await call('POST','/clients/import',owner,{...body,rows:[{row:2,data:{name:'Mudou'}}]})).status,409);
+});
+test('importação é restrita a admin/financeiro e isolada por empresa',async()=>{
+  const c=await Company.create({name:'Importação isolada',plan:'pro'}),owner=await createUser(c,'admin','import-isolated@example.com'),accountant=await createUser(c,'financeiro','import-finance@example.com');
+  const rows=[{row:2,data:{name:'Cliente isolado',document:'98765432100'}}];
+  await Client.create({companyId:b._id,name:'Outra empresa',document:'98765432100'});
+  for(const actor of [null,tech,superAdmin])assert.equal((await call('POST','/clients/import/preview',actor,{rows})).status,actor?403:401);
+  assert.equal((await call('POST','/clients/import/preview',accountant,{rows})).data.ready,1);
+  assert.equal((await call('POST','/clients/import',owner,{rows,confirm:true,requestId:randomUUID(),companyId:String(b._id)})).status,400);
+  const r=await call('POST','/clients/import',accountant,{rows,confirm:true,requestId:randomUUID()});assert.equal(r.status,200);assert.equal(r.data.imported,1);
+  assert.equal(await Client.countDocuments({companyId:c._id}),1);assert.equal(await Client.countDocuments({companyId:b._id,document:'98765432100'}),1);
+  const invalid=await call('POST','/clients/import',owner,{rows:[{row:2,data:{name:'Ataque',companyId:String(b._id)}}],confirm:true,requestId:randomUUID()});assert.equal(invalid.status,200);assert.equal(invalid.data.invalid,1);assert.equal(invalid.data.imported,0);
+});
+test('importações concorrentes não repetem clientes e reavaliam duplicatas após a prévia',async()=>{
+  const c=await Company.create({name:'Importação concorrente',plan:'pro'}),owner=await createUser(c,'admin','import-concurrent@example.com');
+  const rows=[{row:2,data:{name:'Uma vez',document:'AB123456000100'}}];
+  assert.equal((await call('POST','/clients/import/preview',owner,{rows})).data.ready,1);
+  const result=await Promise.all([call('POST','/clients/import',owner,{rows,confirm:true,requestId:randomUUID()}),call('POST','/clients/import',owner,{rows,confirm:true,requestId:randomUUID()})]);
+  assert.deepEqual(result.map(r=>r.status),[200,200]);assert.deepEqual(result.map(r=>r.data.imported).sort(),[0,1]);assert.equal(await Client.countDocuments({companyId:c._id}),1);
+});
+test('falha no lote reverte clientes e comprovante para permitir tentar novamente',async()=>{
+  const c=await Company.create({name:'Importação com falha',plan:'pro'}),owner=await createUser(c,'admin','import-rollback@example.com');
+  const body={rows:[{row:2,data:{name:'Reverter'}}],confirm:true,requestId:randomUUID()};
+  const original=ClientImport.create;ClientImport.create=async()=>{throw new Error('injected-import-failure')};
+  try{const r=await call('POST','/clients/import',owner,body);assert.equal(r.status,500);assert.ok(!r.data.error.includes('injected'));}finally{ClientImport.create=original;}
+  assert.equal(await Client.countDocuments({companyId:c._id}),0);assert.equal(await ClientImport.countDocuments({companyId:c._id}),0);
+  assert.equal((await call('POST','/clients/import',owner,body)).data.imported,1);
+});
+test('importação aceita lote maior que o JSON comum mas mantém limites de tamanho e linhas',async()=>{
+  const c=await Company.create({name:'Importação grande',plan:'pro'}),owner=await createUser(c,'admin','import-large@example.com');
+  const rows=Array.from({length:1000},(_,i)=>({row:i+2,data:{name:'Cliente '+i,notes:'x'.repeat(180)}}));
+  const r=await call('POST','/clients/import',owner,{rows,confirm:true,requestId:randomUUID()});assert.equal(r.status,200);assert.equal(r.data.imported,1000);
+  assert.equal((await call('POST','/clients/import/preview',owner,{rows:[...rows,{row:1002,data:{name:'Excesso'}}]})).status,400);
+  assert.equal((await call('POST','/clients/import/preview',owner,{rows:[],padding:'x'.repeat(5*1024*1024)})).status,413);
+  assert.equal((await call('POST','/clients',owner,{name:'X',notes:'x'.repeat(140000)})).status,413);
+});
+test('limite de importações é individual e não bloqueia outro administrador no mesmo IP',async()=>{
+  const c=await Company.create({name:'Limite de importação',plan:'pro'}),owner=await createUser(c,'admin','import-limit@example.com');
+  const rows=[{row:2,data:{name:'Prévia'}}];
+  for(let i=0;i<30;i++)assert.equal((await call('POST','/clients/import/preview',owner,{rows})).status,200);
+  assert.equal((await call('POST','/clients/import/preview',owner,{rows})).status,429);
+  assert.equal((await call('POST','/clients/import/preview',admin,{rows})).status,200);
+});
 
 test('admin redefine senha da própria empresa, revoga sessões/rota e não armazena texto aberto',async()=>{
   const c=await Company.create({name:'Redefinição',plan:'pro'});

@@ -63,3 +63,12 @@ O admin da empresa pode redefinir a senha de outro usuário do mesmo tenant ou a
 A senha gerada é retornada apenas naquela resposta e mantida em memória na tela até ser fechada. O banco conserva somente o hash. Usuários inativos não são reativados. A própria conta recebe o resultado antes do retorno voluntário ao login, embora seus tokens anteriores já estejam revogados na API.
 
 Nove novos testes integrados cobrem troca efetiva, senha anterior inválida, próprio administrador, isolamento e perfis, confirmação e reautenticação, usuário inativo, reversão de falha, sessão revogada durante a operação, limite de tentativas, login e início de rota concorrentes à troca. Resultado: 23 testes do cliente e 60 do servidor aprovados, além do build web e análise estática sem erros. O Android não teve código alterado nesta atualização. Login e início de rota usam a mesma trava de empresa da redefinição, impedindo que uma requisição em andamento recrie o acesso revogado depois da troca.
+
+
+## Importação de clientes (web)
+
+A importação de .xlsx/CSV é restrita a admin e financeiro do tenant. O navegador valida o arquivo em worker com prazo máximo; a API não aceita arquivo Excel nem macros, apenas JSON com campos permitidos. O limite especial de 5 MB só existe no endpoint autenticado de importação; as demais rotas conservam 128 KB. O lote aceita até mil linhas, sem campos arbitrários ou identificadores de outra empresa.
+
+Prévia não grava dados. A confirmação revalida o ator e sua sessão, confere as duplicatas na empresa atual, e grava os clientes junto do comprovante de importação em uma única transação. Operações concorrentes são serializadas por empresa. Reenvios com o mesmo identificador e conteúdo retornam o mesmo resultado; conteúdo diferente com esse identificador é recusado. Nenhum cadastro existente é atualizado. Relatórios CSV neutralizam fórmulas antes do download.
+
+Os comprovantes têm limpeza TTL de 24 horas e são removidos na exclusão da empresa. Auditoria registra contagens, sem registrar conteúdo de planilha. A validação usa apenas clientes e bancos temporários; não importa dados reais na produção.

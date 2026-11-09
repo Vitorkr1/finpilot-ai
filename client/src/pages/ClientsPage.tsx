@@ -2,10 +2,15 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { AppLayout } from '../components/AppLayout'
 import { Icon } from '../components/Icon'
+import { ClientImportDialog } from '../components/ClientImportDialog'
+import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import type { Client } from '../lib/types'
 
 export function ClientsPage() {
+  const { user } = useAuth()
+  const nativeApp = 'CriaOSFiles' in window || /Android.*;\s*wv\)/i.test(navigator.userAgent)
+  const [importOpen, setImportOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [deleting, setDeleting] = useState<string | null>(null)
   const [clients, setClients] = useState<Client[]>([])
@@ -14,8 +19,10 @@ export function ClientsPage() {
   const [form, setForm] = useState({
     name: '',
     phone: '',
+    email: '',
     document: '',
     address: '',
+    notes: '',
   })
   const [submitting, setSubmitting] = useState(false)
 
@@ -42,7 +49,7 @@ export function ClientsPage() {
     setError(null)
     try {
       await api.post('/clients', form)
-      setForm({ name: '', phone: '', document: '', address: '' })
+      setForm({ name: '', phone: '', email: '', document: '', address: '', notes: '' })
       await loadClients()
     } catch {
       setError('Não foi possível criar o cliente. Verifique os dados.')
@@ -71,7 +78,7 @@ export function ClientsPage() {
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
   const filtered = clients.filter((c) =>
-    [c.name, c.phone, c.document, c.address].some((v) =>
+    [c.name, c.phone, c.email, c.document, c.address].some((v) =>
       v
         ?.normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
@@ -82,7 +89,7 @@ export function ClientsPage() {
 
   return (
     <AppLayout>
-      <h2 className="mb-4 text-xl font-semibold text-slate-900">Clientes</h2>
+      <div className="clients-heading"><h2 className="text-xl font-semibold text-slate-900">Clientes</h2>{!nativeApp && (user?.role === 'admin' || user?.role === 'financeiro') && <button type="button" className="secondary-button" onClick={() => setImportOpen(true)}><Icon name="file" size={17} /> Importar planilha</button>}</div>
       <p className="page-description">
         Relacionamentos bem cuidados começam com informações organizadas.
       </p>
@@ -111,6 +118,14 @@ export function ClientsPage() {
             onChange={(e) => setForm({ ...form, phone: e.target.value })}
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
           />
+        </label>
+        <label className="form-field">
+          <span>E-mail</span>
+          <input aria-label="E-mail do cliente" type="email" placeholder="E-mail" value={form.email} onChange={event => setForm({ ...form, email: event.target.value })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+        </label>
+        <label className="form-field">
+          <span>Observações</span>
+          <input aria-label="Observações do cliente" placeholder="Observações" maxLength={4000} value={form.notes} onChange={event => setForm({ ...form, notes: event.target.value })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
         </label>
         <label className="form-field">
           <span>CPF/CNPJ</span>
@@ -171,6 +186,7 @@ export function ClientsPage() {
               <tr>
                 <th className="px-4 py-2">Nome</th>
                 <th className="px-4 py-2">Telefone</th>
+                <th className="px-4 py-2">E-mail</th>
                 <th className="px-4 py-2">Documento</th>
                 <th className="px-4 py-2" />
               </tr>
@@ -182,6 +198,7 @@ export function ClientsPage() {
                     {c.name}
                   </td>
                   <td className="px-4 py-2 text-slate-600">{c.phone || '-'}</td>
+                  <td className="px-4 py-2 text-slate-600">{c.email || '-'}</td>
                   <td className="px-4 py-2 text-slate-600">
                     {c.document || '-'}
                   </td>
@@ -206,6 +223,7 @@ export function ClientsPage() {
           </table>
         </div>
       )}
+      {importOpen && <ClientImportDialog onClose={() => setImportOpen(false)} onImported={() => { void loadClients() }} />}
     </AppLayout>
   )
 }

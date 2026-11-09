@@ -1,4 +1,4 @@
-const { z } = require('zod');
+const { clientSchema } = require('../services/clientData');
 const Client = require('../models/Client');
 const Budget = require('../models/Budget');
 const ServiceOrder = require('../models/ServiceOrder');
@@ -6,14 +6,6 @@ const asyncHandler = require('../utils/asyncHandler');
 const { logAction } = require('../services/audit');
 const v = require('../utils/validation');
 const transaction = require('../utils/transaction');
-
-const clientSchema = z.object({
-  name: v.name,
-  phone: v.text(40).optional(),
-  document: v.text(40).optional(),
-  address: v.text(500).optional(),
-  notes: v.text().optional(),
-});
 
 const list = asyncHandler(async (req, res) => {
   const clients = await Client.find({ companyId: req.user.companyId }).sort({ name: 1 });

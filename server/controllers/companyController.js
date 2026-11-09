@@ -123,7 +123,7 @@ const remove = asyncHandler(async (req, res) => {
   await transaction(async (session) => {
     const users = await User.find({ companyId: company._id }).select('_id').session(session);
     await require('../models/AuthSession').deleteMany({ userId: { $in: users.map((u) => u._id) } }).session(session);
-    for (const model of ['User', 'Client', 'Budget', 'ServiceOrder', 'Appointment', 'StockItem', 'FinancialEntry', 'RouteSession', 'WhatsAppMessage', 'WhatsAppAuthFile', 'AuditLog']) {
+    for (const model of ['User', 'Client', 'ClientImport', 'Budget', 'ServiceOrder', 'Appointment', 'StockItem', 'FinancialEntry', 'RouteSession', 'WhatsAppMessage', 'WhatsAppAuthFile', 'AuditLog']) {
       await require(`../models/${model}`).deleteMany({ companyId: company._id }).session(session);
     }
     await Company.deleteOne({ _id: company._id }).session(session);

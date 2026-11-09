@@ -70,3 +70,19 @@ As integrações reais com WhatsApp, Cloudinary e Groq dependem das credenciais 
 
 - [Manual do cliente (PDF)](docs/clientes/criaos-manual-do-cliente.pdf): uso dos módulos, perfis de acesso e aplicativo Android.
 - [Proposta comercial (PDF)](docs/clientes/criaos-proposta-comercial.pdf): apresentação do sistema por R$ 250,00 mensais por empresa. Escopo de implantação, suporte e integrações deve ser confirmado na contratação.
+
+
+## Importação de clientes pela web
+
+Admin e financeiro podem abrir **Clientes → Importar planilha** no navegador. Aceita Excel **.xlsx** e **CSV**, com até **3 MB e 1.000 clientes por arquivo**. Arquivos .xls precisam ser salvos como .xlsx antes. Não é necessário atualizar o APK; o botão fica disponível no navegador.
+
+1. Baixe o modelo CSV, que também pode ser preenchido no Excel, ou selecione sua planilha com cabeçalhos na primeira linha.
+2. Selecione a aba e confira a correspondência das colunas: nome, telefone, e-mail, CPF/CNPJ, endereço completo e observações. Apenas nome é obrigatório. Colunas ignoradas são indicadas na tela.
+3. Use **Conferir dados antes de salvar**. A prévia separa novos clientes, repetições e linhas inválidas, sem gravar nada.
+4. Confirme a quantidade de novos clientes e importe. Cadastros existentes permanecem intactos; repetições e linhas inválidas ficam de fora. Baixe o relatório CSV para corrigir as linhas necessárias.
+
+Telefones e documentos devem ser texto no Excel para preservar zeros à esquerda. O sistema não consegue recuperar zeros que já foram removidos pelo editor da planilha. A prévia mostra os valores que serão salvos.
+
+O arquivo é lido em um processo separado do navegador, com limite de tempo e validação da estrutura do Excel. A API recebe somente os campos revisados, valida novamente e usa o companyId da sessão. A confirmação é transacional e tem identificação para que uma repetição por falha de rede não crie o mesmo lote novamente. Limites de tamanho, quantidade e requisições são aplicados na API.
+
+Duplicatas são comparadas por CPF/CNPJ ou por nome e telefone/e-mail; sem contatos, por nome e endereço. Dois documentos diferentes não são fundidos por terem o mesmo nome. A conferência é repetida ao salvar, inclusive para importações simultâneas. O relatório conserva apenas o resumo das linhas, por até 24 horas, sem guardar o arquivo original. A comparação não substitui a conferência humana de homônimos ou dados incompletos.

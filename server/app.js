@@ -46,6 +46,8 @@ function createApp() {
     next();
   });
   app.use(cors((req, callback) => callback(null, { origin: originAllowed(req, req.get('origin')) ? req.get('origin') || false : false, credentials: true })));
+  // Só a importação aceita lotes maiores, após autenticação e limite de uso.
+  app.use('/api/clients/import', require('./routes/clientImportRoutes'));
   app.use(express.json({ limit: '128kb', inflate: false }));
   app.use(cookieParser());
   if (process.env.NODE_ENV !== 'test') {
