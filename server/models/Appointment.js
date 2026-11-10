@@ -6,6 +6,7 @@ const appointmentSchema = new mongoose.Schema(
   {
     companyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
     technicianId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    deletedTechnicianName: { type: String, default: '' },
     serviceOrderId: { type: mongoose.Schema.Types.ObjectId, ref: 'ServiceOrder', default: null },
     date: { type: Date, required: true },
     startTime: { type: String, required: true },

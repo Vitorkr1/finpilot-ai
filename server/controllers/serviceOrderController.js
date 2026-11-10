@@ -10,6 +10,7 @@ const { logAction } = require('../services/audit');
 const v = require('../utils/validation');
 const transaction = require('../utils/transaction');
 const { dateTime, openingFields, executionFields, validateAttendance, attendanceUpdate } = require('../services/serviceOrderData');
+const { lockTechnician } = require('../services/teamAccess');
 
 const addMaterialSchema = z.object({
   stockItemId: v.objectId,
@@ -69,6 +70,7 @@ const create = asyncHandler(async (req, res) => {
   const order = await transaction(async (session) => {
     const reference = await Client.findOneAndUpdate({ _id: data.clientId, companyId: req.user.companyId }, { $inc: { __v: 1 } }, { session });
     if (!reference) throw v.httpError(400, 'Cliente não encontrado nesta empresa.');
+    await lockTechnician(data.technicianId, req.user.companyId, session);
     const [created] = await ServiceOrder.create([{ ...data, companyId: req.user.companyId, checklist }], { session });
     return created;
   });
@@ -91,11 +93,15 @@ const update = asyncHandler(async (req, res) => {
     if (!tech) return res.status(400).json({ error: 'Técnico não encontrado nesta empresa' });
   }
 
-  const order = await ServiceOrder.findOneAndUpdate(
+  const save = (session) => ServiceOrder.findOneAndUpdate(
     { ...scope, updatedAt: current.updatedAt, __v: current.__v },
-    { $set: patch, $inc: { __v: 1 } },
-    { new: true, runValidators: true }
+    { $set: { ...patch, ...('technicianId' in data ? { deletedTechnicianName: '' } : {}) }, $inc: { __v: 1 } },
+    { new: true, runValidators: true, ...(session ? { session } : {}) }
   );
+  const order = 'technicianId' in data ? await transaction(async (session) => {
+    await lockTechnician(data.technicianId, req.user.companyId, session);
+    return save(session);
+  }) : await save();
   if (!order) throw v.httpError(409, 'Esta OS foi alterada durante o salvamento. Atualize a lista e confira os dados antes de tentar novamente.');
   await logAction({ companyId: req.user.companyId, userId: req.user._id, action: 'update', entity: 'ServiceOrder', entityId: order._id });
   res.json(order);

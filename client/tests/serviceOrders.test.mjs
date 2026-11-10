@@ -39,4 +39,5 @@ test('exportação inclui chamado, execução e pendências, com fallback para O
   assert.equal(rows[2][2], 'Técnico A'); assert.equal(rows[2][4], formatDateTime(updated.calledAt))
   assert.deepEqual(rows[2].slice(8, 12), ['Feita inspeção', 'Em aberto', 'Falta de material', 'Falta sensor'])
   assert.equal(serviceOrderCsvRows([{ ...updated, hasPending: false }], [], [])[1][9], 'Resolvida')
+  assert.equal(serviceOrderCsvRows([{ ...updated, deletedTechnicianName: 'Técnico anterior' }], [], [{ _id: 'outra-conta', name: 'Nova conta' }])[1][2], 'Técnico anterior (membro excluído)')
 })

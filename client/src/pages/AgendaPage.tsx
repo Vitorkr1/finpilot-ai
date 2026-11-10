@@ -72,7 +72,9 @@ export function AgendaPage() {
     }
   }
 
-  function technicianName(id: string) {
+  function technicianName(appointment: Appointment) {
+    if (appointment.deletedTechnicianName) return `${appointment.deletedTechnicianName} (membro excluído)`
+    const id = appointment.technicianId
     return id === user?._id ? user.name : technicians.find((t) => t._id === id)?.name || 'Técnico'
   }
 
@@ -162,7 +164,7 @@ export function AgendaPage() {
                 {a.startTime}–{a.endTime}
               </span>
               <span className="text-slate-600">
-                {technicianName(a.technicianId)}
+                {technicianName(a)}
               </span>
               <span className="text-xs text-slate-500">{a.status}</span>
             </div>

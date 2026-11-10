@@ -250,7 +250,8 @@ export function ServiceOrdersPage() {
                     finally { setPending(null) }
                   }} className="rounded-lg border border-slate-300 px-2 py-1 text-sm">
                     <option value="">Sem técnico atribuído</option>
-                    {technicians.map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}
+                    {order.deletedTechnicianName && order.technicianId && <option value={order.technicianId} disabled>{order.deletedTechnicianName} (excluído)</option>}
+                    {technicians.filter(t => !order.deletedTechnicianName || t._id !== order.technicianId).map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}
                   </select></label>}
                   <label>Status
                   <select

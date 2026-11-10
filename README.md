@@ -60,6 +60,14 @@ O aviso informa que o endereço antigo deixará de permitir login e que as sess�
 
 No login web, inclusive no WebView do app, erros de credenciais, suspensão, limite de tentativas, endereço incorreto e conexão passam a ter mensagens diferentes. Antes de redefinir uma senha, confira em Equipe o e-mail cadastrado e o status Ativo. Para corrigir a senha, continue usando **Redefinir senha**; após uma redefinição, a senha antiga não funciona mais. Estas telas chegam ao Android pela atualização do sistema web, sem novo APK.
 
+## Excluir membros da equipe
+
+Em **Equipe → Excluir membro**, somente o admin pode apagar definitivamente outra conta da própria empresa, ativa ou inativa. A confirmação mostra nome/e-mail, exige a senha atual do administrador e uma marcação explícita de exclusão definitiva. A própria conta não pode ser excluída, e a empresa precisa conservar um admin ativo. A exclusão remove o documento do usuário, as sessões e a rota ativa; a pessoa sai da lista e não consegue mais entrar com o acesso antigo.
+
+OS, agendamentos, clientes, materiais e lançamentos permanecem no histórico. O nome do responsável excluído é preservado nas OS, na agenda, no CSV de OS e nos registros anteriores de auditoria. Os identificadores históricos são mantidos; ao cadastrar novamente o mesmo e-mail, a pessoa recebe uma conta nova e não herda as ordens ou a agenda antigas. Admin/financeiro podem reatribuir as OS e os agendamentos a um técnico ativo. Agendamentos do membro excluído também podem ser cancelados pela API; para reagendar, atribua um técnico ativo.
+
+A operação é transacional: falhas revertem a remoção e a revogação de acessos. Criação/reatribuição de OS e agenda se coordenam com a exclusão, evitando vínculos novos sem o nome histórico. O botão aparece no site e no app Android após a publicação e o recarregamento do sistema; não exige outro APK. Adicionar a função não exclui automaticamente nenhuma conta existente.
+
 ## Assinatura Android
 
 O projeto aceita `CRIAOS_KEYSTORE_FILE`, `CRIAOS_STORE_PASSWORD`, `CRIAOS_KEY_ALIAS` e `CRIAOS_KEY_PASSWORD` como variáveis de ambiente para `./gradlew assembleRelease`. Guarde a chave fora do Git: futuras atualizações precisam da mesma assinatura. O `.gitignore` exclui chaves, arquivos de ambiente e artefatos locais.

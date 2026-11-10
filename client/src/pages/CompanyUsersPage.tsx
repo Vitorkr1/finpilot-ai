@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { AppLayout } from '../components/AppLayout'
 import { ResetPasswordDialog } from '../components/ResetPasswordDialog'
 import { ChangeUserEmailDialog } from '../components/ChangeUserEmailDialog'
+import { DeleteTeamMemberDialog } from '../components/DeleteTeamMemberDialog'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import type { Role, User } from '../lib/types'
@@ -16,6 +17,8 @@ export function CompanyUsersPage() {
   const { user } = useAuth()
   const [resetTarget, setResetTarget] = useState<User | null>(null)
   const [emailTarget, setEmailTarget] = useState<User | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null)
+  const [success, setSuccess] = useState('')
   const [users, setUsers] = useState<User[]>([])
   const [pending, setPending] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -136,6 +139,7 @@ export function CompanyUsersPage() {
       </form>
 
       <p className="team-password-note">Confira o e-mail e se o usuário está ativo antes de tentar o login. Use <strong>Alterar e-mail</strong> para corrigir o acesso ou <strong>Redefinir senha</strong> para gerar uma nova senha, exibida uma única vez para copiar.</p>
+      {success && <p role="status" className="mb-4 text-sm text-green-700">{success}</p>}
       {loading ? (
         <p className="text-sm text-slate-500">Carregando...</p>
       ) : users.length === 0 ? (
@@ -180,6 +184,7 @@ export function CompanyUsersPage() {
                     >
                       {u.active ? 'Desativar' : 'Ativar'}
                     </button>
+                    <button type="button" className="member-delete-link" disabled={pending !== null || u._id === user?._id} title={u._id === user?._id ? 'Você não pode excluir sua própria conta.' : undefined} aria-label={`Excluir membro ${u.name}`} onClick={() => { setSuccess(''); setCreatedInfo(null); setDeleteTarget(u) }}>Excluir membro</button>
                     </div>
                   </td>
                 </tr>
@@ -190,6 +195,9 @@ export function CompanyUsersPage() {
       )}
       {resetTarget && <ResetPasswordDialog target={resetTarget} ownId={user?._id} onClose={() => setResetTarget(null)} />}
       {emailTarget && <ChangeUserEmailDialog target={emailTarget} ownId={user?._id} onClose={() => setEmailTarget(null)} onChanged={updated => setUsers(current => current.map(person => person._id === updated._id ? updated : person))} />}
+      {deleteTarget && <DeleteTeamMemberDialog target={deleteTarget} onClose={() => setDeleteTarget(null)} onDeleted={id => {
+        setUsers(current => current.filter(person => person._id !== id)); setDeleteTarget(null); setError(null); setSuccess('Membro excluído definitivamente. As OS e os agendamentos foram preservados no histórico.')
+      }} />}
     </AppLayout>
   )
 }

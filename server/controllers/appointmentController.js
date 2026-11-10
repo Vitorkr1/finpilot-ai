@@ -6,6 +6,7 @@ const { logAction } = require('../services/audit');
 const ServiceOrder = require('../models/ServiceOrder');
 const v = require('../utils/validation');
 const transaction = require('../utils/transaction');
+const { lockTechnician } = require('../services/teamAccess');
 
 const appointmentSchema = z.object({
   technicianId: v.objectId,
@@ -40,9 +41,9 @@ const list = asyncHandler(async (req, res) => {
   res.json(appointments);
 });
 
-async function validateAppointment(data, companyId) {
+async function validateAppointment(data, companyId, skipTechnician = false) {
   if (data.endTime <= data.startTime) throw v.httpError(400, 'O horário final precisa ser posterior ao inicial.');
-  await assertTechnicianBelongsToCompany(data.technicianId, companyId);
+  if (!skipTechnician) await assertTechnicianBelongsToCompany(data.technicianId, companyId);
   if (data.serviceOrderId && !await ServiceOrder.exists({ _id: data.serviceOrderId, companyId })) throw v.httpError(400, 'Ordem de serviço não encontrada nesta empresa.');
 }
 
@@ -51,6 +52,7 @@ const create = asyncHandler(async (req, res) => {
   await validateAppointment(data, req.user.companyId);
 
   const appointment = await transaction(async (session) => {
+    await lockTechnician(data.technicianId, req.user.companyId, session);
     if (data.serviceOrderId && !await ServiceOrder.findOneAndUpdate({ _id: data.serviceOrderId, companyId: req.user.companyId }, { $inc: { __v: 1 } }, { session })) throw v.httpError(400, 'Ordem de serviço não encontrada nesta empresa.');
     const [created] = await Appointment.create([{ ...data, companyId: req.user.companyId, date: new Date(data.date) }], { session });
     return created;
@@ -65,9 +67,12 @@ const update = asyncHandler(async (req, res) => {
     const current = await Appointment.findOne({ _id: req.params.id, companyId: req.user.companyId }).session(session);
     if (!current) throw v.httpError(404, 'Agendamento não encontrado.');
     const merged = { ...current.toObject(), ...data };
-    await validateAppointment(merged, req.user.companyId);
+    const cancellingDeleted = Boolean(current.deletedTechnicianName) && data.status === 'cancelado' && Object.keys(data).length === 1;
+    await validateAppointment(merged, req.user.companyId, cancellingDeleted);
+    if (!cancellingDeleted) await lockTechnician(merged.technicianId, req.user.companyId, session);
     if (merged.serviceOrderId && !await ServiceOrder.findOneAndUpdate({ _id: merged.serviceOrderId, companyId: req.user.companyId }, { $inc: { __v: 1 } }, { session })) throw v.httpError(400, 'Ordem de serviço não encontrada nesta empresa.');
     Object.assign(current, data, data.date ? { date: new Date(data.date) } : {});
+    if ('technicianId' in data) current.deletedTechnicianName = '';
     await current.save({ session });
     return current;
   });

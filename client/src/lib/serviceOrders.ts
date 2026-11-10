@@ -30,7 +30,7 @@ export function serviceOrderCsvRows(orders: ServiceOrder[], clients: Client[], t
     ['OS (ID)', 'Cliente', 'Técnico', 'Status', `Chamado (${zone})`, 'Descrição do chamado', `Início do atendimento (${zone})`, `Fim do atendimento (${zone})`, 'Serviço realizado', 'Situação da pendência', 'Motivo da pendência', 'Detalhes da pendência', 'Horas registradas'],
     ...orders.map(order => [
       order._id, clients.find(client => client._id === order.clientId)?.name || order.clientId,
-      order.technicianId ? technicians.find(tech => tech._id === order.technicianId)?.name || order.technicianId : 'Sem técnico',
+      order.deletedTechnicianName ? `${order.deletedTechnicianName} (membro excluído)` : order.technicianId ? technicians.find(tech => tech._id === order.technicianId)?.name || order.technicianId : 'Sem técnico',
       ORDER_STATUS[order.status], formatDateTime(order.calledAt || order.createdAt), order.requestDescription || '',
       formatDateTime(order.startedAt), formatDateTime(order.finishedAt), order.serviceDescription || '',
       order.hasPending ? 'Em aberto' : order.pendingNotes ? 'Resolvida' : 'Sem pendência',

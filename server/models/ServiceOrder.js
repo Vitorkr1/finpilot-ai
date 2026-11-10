@@ -23,6 +23,7 @@ const serviceOrderSchema = new mongoose.Schema(
     clientId: { type: mongoose.Schema.Types.ObjectId, ref: 'Client', required: true },
     budgetId: { type: mongoose.Schema.Types.ObjectId, ref: 'Budget', default: null },
     technicianId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    deletedTechnicianName: { type: String, default: '' },
     segment: { type: String, enum: SEGMENTS, default: 'outro' },
     checklist: { type: [checklistItemSchema], default: [] },
     photos: { type: [String], default: [] },

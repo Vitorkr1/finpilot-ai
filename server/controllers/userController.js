@@ -46,7 +46,7 @@ const create = asyncHandler(async (req, res) => {
 
 const setActive = asyncHandler(async (req, res) => {
   const { active } = z.object({ active: z.boolean() }).parse(req.body);
-  if (String(req.user._id) === req.params.id && !active) throw v.httpError(409, 'Você não pode desativar seu próprio acesso.');
+  if (req.user._id.equals(req.params.id) && !active) throw v.httpError(409, 'Você não pode desativar seu próprio acesso.');
   const user = await transaction(async (session) => {
     const company = await Company.findOneAndUpdate({ _id: req.user.companyId }, { $inc: { userRevision: 1 } }, { new: true, session });
     const current = await User.findOne({ _id: req.params.id, companyId: company._id }).session(session);
@@ -120,4 +120,30 @@ const changeEmail = asyncHandler(async (req, res) => {
   res.json({ user: user.toJSON(), selfChange: String(user._id) === String(req.user._id) });
 });
 
-module.exports = { list, listTechnicians, create, setActive, resetPassword, changeEmail, USER_LIMIT_BY_PLAN };
+const remove = asyncHandler(async (req, res) => {
+  const data = z.object({ confirm: z.literal(true), currentPassword: z.string().min(1).max(256), expectedEmail: v.email }).strict().parse(req.body);
+  if (req.user._id.equals(req.params.id)) throw v.httpError(409, 'Você não pode excluir sua própria conta.');
+  const actor = await User.findOne({ _id: req.user._id, companyId: req.user.companyId, active: true, role: 'admin' }).select('+passwordHash');
+  if (!actor || !await actor.comparePassword(data.currentPassword)) throw v.httpError(403, 'Sua senha atual não confere. O membro não foi excluído.');
+  await transaction(async (session) => {
+    const company = await Company.findOneAndUpdate({ _id: req.user.companyId, subscriptionStatus: { $ne: 'suspended' } }, { $inc: { userRevision: 1 } }, { session });
+    if (!company) throw v.httpError(403, 'Empresa indisponível. Contate o suporte.');
+    const authorized = await User.exists({ _id: actor._id, companyId: company._id, active: true, role: 'admin', email: actor.email, passwordHash: actor.passwordHash }).session(session);
+    const activeSession = await AuthSession.exists({ _id: req.authSession._id, userId: actor._id, scope: 'tenant', expiresAt: { $gt: new Date() } }).session(session);
+    if (!authorized || !activeSession) throw v.httpError(401, 'Seu acesso foi encerrado. Entre novamente.');
+    const member = await User.findOneAndDelete({ _id: req.params.id, companyId: company._id }).session(session);
+    if (!member) throw v.httpError(404, 'Membro não encontrado.');
+    if (member.email !== data.expectedEmail) throw v.httpError(409, 'Os dados deste membro mudaram. Feche esta tela e atualize a equipe antes de excluir.');
+    if (member.role === 'admin' && member.active && !await User.exists({ companyId: company._id, role: 'admin', active: true }).session(session)) throw v.httpError(409, 'Mantenha pelo menos um administrador ativo na empresa.');
+    const ServiceOrder = require('../models/ServiceOrder'), Appointment = require('../models/Appointment'), AuditLog = require('../models/AuditLog');
+    const orders = await ServiceOrder.updateMany({ companyId: company._id, technicianId: member._id }, { $set: { deletedTechnicianName: member.name }, $inc: { __v: 1 } }, { session });
+    const appointments = await Appointment.updateMany({ companyId: company._id, technicianId: member._id }, { $set: { deletedTechnicianName: member.name }, $inc: { __v: 1 } }, { session });
+    await AuditLog.updateMany({ companyId: company._id, userId: member._id }, { $set: { userName: member.name } }, { session, timestamps: false });
+    await AuthSession.deleteMany({ userId: member._id }).session(session);
+    await RouteSession.deleteMany({ companyId: company._id, technicianId: member._id }).session(session);
+    await AuditLog.create([{ companyId: company._id, userId: actor._id, userName: actor.name, action: 'delete-member', entity: 'User', entityId: member._id, details: { memberName: member.name, role: member.role, preservedOrders: orders.matchedCount, preservedAppointments: appointments.matchedCount } }], { session });
+  });
+  res.status(204).end();
+});
+
+module.exports = { list, listTechnicians, create, setActive, resetPassword, changeEmail, remove, USER_LIMIT_BY_PLAN };

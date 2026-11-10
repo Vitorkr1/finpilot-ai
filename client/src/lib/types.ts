@@ -63,6 +63,7 @@ export interface ServiceOrder {
   clientId: string
   budgetId: string | null
   technicianId: string | null
+  deletedTechnicianName?: string
   segment: string
   checklist: ChecklistItem[]
   photos: string[]
@@ -86,6 +87,7 @@ export type AppointmentStatus = 'agendado' | 'confirmado' | 'concluido' | 'cance
 export interface Appointment {
   _id: string
   technicianId: string
+  deletedTechnicianName?: string
   serviceOrderId: string | null
   date: string
   startTime: string

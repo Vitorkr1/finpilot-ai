@@ -4,6 +4,7 @@ import './service-orders.css'
 
 export function ServiceOrderRecord({ order }: { order: ServiceOrder }) {
   return <div className="os-record">
+    {order.deletedTechnicianName && <p className="mb-3 text-xs text-slate-500">Responsável registrado: {order.deletedTechnicianName} · membro excluído da equipe</p>}
     <dl className="os-dates">
       <div><dt>Data e hora do chamado</dt><dd>{formatDateTime(order.calledAt || order.createdAt)}</dd>{!order.calledAt && <small>Data de cadastro da OS</small>}</div>
       <div><dt>Início do atendimento</dt><dd>{formatDateTime(order.startedAt)}</dd></div>
