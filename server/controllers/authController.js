@@ -35,7 +35,7 @@ async function issueSession(user, res, cookieName) {
       const company = await Company.findOneAndUpdate({ _id: user.companyId, subscriptionStatus: { $ne: 'suspended' } }, { $inc: { userRevision: 1 } }, { session: tx });
       if (!company) throw validation.httpError(403, 'Assinatura suspensa. Contate o suporte.');
     }
-    const current = await User.findOne({ _id: user._id, active: true, passwordHash: user.passwordHash }).session(tx);
+    const current = await User.findOne({ _id: user._id, active: true, email: user.email, passwordHash: user.passwordHash }).session(tx);
     if (!current) throw validation.httpError(401, 'Seu acesso mudou. Entre novamente com a senha atual.');
     const session = new AuthSession({ userId: user._id, scope: cookieName === ADMIN_REFRESH_COOKIE ? 'admin' : 'tenant', expiresAt: new Date(Date.now() + COOKIE_OPTIONS.maxAge) });
     const accessToken = signAccessToken(current, session._id);

@@ -52,6 +52,14 @@ Em **Equipe → Redefinir senha**, o admin pode gerar uma nova senha para qualqu
 
 A nova senha aparece somente após a operação, com botão para copiar, sem armazenamento em texto aberto ou em logs. Fechar ou recarregar a tela elimina essa exibição; para obter outro acesso, gere outra senha. Ao redefinir a própria conta, copie antes de voltar ao login. Usuários inativos continuam inativos. A operação é limitada por administrador e não permite acessar usuários de outra empresa.
 
+## Alterar e-mail de acesso
+
+Em **Equipe → Alterar e-mail**, o admin corrige o e-mail de um usuário da própria empresa, inclusive o próprio. É necessário informar o novo endereço e confirmar com a senha atual do administrador. O e-mail é normalizado, validado e não pode estar em uso por outra conta. A senha e a função do usuário são mantidas; usuários inativos continuam inativos.
+
+O aviso informa que o endereço antigo deixará de permitir login e que as sessões e a rota ativa serão encerradas. Após salvar, o usuário entra com **o novo e-mail e a mesma senha**. Ao mudar o próprio endereço, o admin vê o resultado e volta voluntariamente ao login. A alteração é transacional e protegida contra formulário antigo, sessão revogada e login em andamento com o e-mail anterior.
+
+No login web, inclusive no WebView do app, erros de credenciais, suspensão, limite de tentativas, endereço incorreto e conexão passam a ter mensagens diferentes. Antes de redefinir uma senha, confira em Equipe o e-mail cadastrado e o status Ativo. Para corrigir a senha, continue usando **Redefinir senha**; após uma redefinição, a senha antiga não funciona mais. Estas telas chegam ao Android pela atualização do sistema web, sem novo APK.
+
 ## Assinatura Android
 
 O projeto aceita `CRIAOS_KEYSTORE_FILE`, `CRIAOS_STORE_PASSWORD`, `CRIAOS_KEY_ALIAS` e `CRIAOS_KEY_PASSWORD` como variáveis de ambiente para `./gradlew assembleRelease`. Guarde a chave fora do Git: futuras atualizações precisam da mesma assinatura. O `.gitignore` exclui chaves, arquivos de ambiente e artefatos locais.

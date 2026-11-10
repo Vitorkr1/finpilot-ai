@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { AppLayout } from '../components/AppLayout'
 import { ResetPasswordDialog } from '../components/ResetPasswordDialog'
+import { ChangeUserEmailDialog } from '../components/ChangeUserEmailDialog'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import type { Role, User } from '../lib/types'
@@ -14,6 +15,7 @@ const ROLE_LABEL: Record<string, string> = {
 export function CompanyUsersPage() {
   const { user } = useAuth()
   const [resetTarget, setResetTarget] = useState<User | null>(null)
+  const [emailTarget, setEmailTarget] = useState<User | null>(null)
   const [users, setUsers] = useState<User[]>([])
   const [pending, setPending] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -133,7 +135,7 @@ export function CompanyUsersPage() {
         {error && <p className="sm:col-span-4 text-sm text-red-600">{error}</p>}
       </form>
 
-      <p className="team-password-note">As senhas atuais são protegidas. Para recuperar um acesso, use <strong>Redefinir senha</strong>. A nova senha substitui a anterior e aparece uma única vez para copiar.</p>
+      <p className="team-password-note">Confira o e-mail e se o usuário está ativo antes de tentar o login. Use <strong>Alterar e-mail</strong> para corrigir o acesso ou <strong>Redefinir senha</strong> para gerar uma nova senha, exibida uma única vez para copiar.</p>
       {loading ? (
         <p className="text-sm text-slate-500">Carregando...</p>
       ) : users.length === 0 ? (
@@ -169,6 +171,7 @@ export function CompanyUsersPage() {
                   </td>
                   <td className="px-4 py-2 text-right">
                     <div className="team-user-actions">
+                    <button type="button" disabled={pending !== null} onClick={() => setEmailTarget(u)} className="text-brand-600 hover:underline" aria-label={`Alterar e-mail de ${u.name}`}>Alterar e-mail</button>
                     <button type="button" disabled={pending !== null} onClick={() => setResetTarget(u)} className="text-brand-600 hover:underline" aria-label={`Redefinir senha de ${u.name}`}>Redefinir senha</button>
                     <button
                       disabled={pending !== null || u._id === user?._id}
@@ -186,6 +189,7 @@ export function CompanyUsersPage() {
         </div>
       )}
       {resetTarget && <ResetPasswordDialog target={resetTarget} ownId={user?._id} onClose={() => setResetTarget(null)} />}
+      {emailTarget && <ChangeUserEmailDialog target={emailTarget} ownId={user?._id} onClose={() => setEmailTarget(null)} onChanged={updated => setUsers(current => current.map(person => person._id === updated._id ? updated : person))} />}
     </AppLayout>
   )
 }

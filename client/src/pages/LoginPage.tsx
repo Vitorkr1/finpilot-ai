@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { Icon } from '../components/Icon'
+import { loginErrorMessage } from '../lib/loginError'
 export function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
@@ -17,10 +18,8 @@ export function LoginPage() {
     try {
       await login(email.trim(), password)
       navigate('/', { replace: true })
-    } catch {
-      setError(
-        'Não foi possível entrar. Confira suas credenciais e sua conexão.',
-      )
+    } catch (error) {
+      setError(loginErrorMessage(error))
     } finally {
       setSubmitting(false)
     }
@@ -95,6 +94,10 @@ export function LoginPage() {
                 id="email"
                 type="email"
                 autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                maxLength={254}
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -108,6 +111,10 @@ export function LoginPage() {
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="current-password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  maxLength={256}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

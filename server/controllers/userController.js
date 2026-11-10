@@ -96,4 +96,28 @@ const resetPassword = asyncHandler(async (req, res) => {
   res.json({ user: user.toJSON(), tempPassword, selfReset: String(user._id) === String(req.user._id) });
 });
 
-module.exports = { list, listTechnicians, create, setActive, resetPassword, USER_LIMIT_BY_PLAN };
+const changeEmail = asyncHandler(async (req, res) => {
+  const data = z.object({ email: v.email, expectedEmail: v.email, confirm: z.literal(true), currentPassword: z.string().min(1).max(256) }).strict().parse(req.body);
+  const actor = await User.findOne({ _id: req.user._id, companyId: req.user.companyId, active: true, role: 'admin' }).select('+passwordHash');
+  if (!actor || !await actor.comparePassword(data.currentPassword)) throw v.httpError(403, 'Sua senha atual não confere. O e-mail não foi alterado.');
+  const user = await transaction(async (session) => {
+    const company = await Company.findOneAndUpdate({ _id: req.user.companyId, subscriptionStatus: { $ne: 'suspended' } }, { $inc: { userRevision: 1 } }, { new: true, session });
+    if (!company) throw v.httpError(403, 'Empresa indisponível. Contate o suporte.');
+    const authorized = await User.exists({ _id: actor._id, companyId: company._id, active: true, role: 'admin', email: actor.email, passwordHash: actor.passwordHash }).session(session);
+    const activeSession = await AuthSession.exists({ _id: req.authSession._id, userId: actor._id, scope: 'tenant', expiresAt: { $gt: new Date() } }).session(session);
+    if (!authorized || !activeSession) throw v.httpError(401, 'Seu acesso foi encerrado. Entre novamente.');
+    const current = await User.findOne({ _id: req.params.id, companyId: company._id }).session(session);
+    if (!current) throw v.httpError(404, 'Usuário não encontrado.');
+    if (current.email !== data.expectedEmail) throw v.httpError(409, 'O e-mail deste usuário mudou. Feche esta tela e atualize a equipe antes de tentar novamente.');
+    if (current.email === data.email) throw v.httpError(409, 'Este já é o e-mail atual do usuário.');
+    const updated = await User.findOneAndUpdate({ _id: current._id, companyId: company._id, email: current.email }, { $set: { email: data.email } }, { new: true, runValidators: true, session });
+    if (!updated) throw v.httpError(409, 'O usuário mudou durante a alteração. Atualize a equipe.');
+    await AuthSession.deleteMany({ userId: updated._id }).session(session);
+    await RouteSession.deleteMany({ companyId: company._id, technicianId: updated._id }).session(session);
+    return updated;
+  });
+  await logAction({ companyId: req.user.companyId, userId: req.user._id, action: 'change-email', entity: 'User', entityId: user._id });
+  res.json({ user: user.toJSON(), selfChange: String(user._id) === String(req.user._id) });
+});
+
+module.exports = { list, listTechnicians, create, setActive, resetPassword, changeEmail, USER_LIMIT_BY_PLAN };
